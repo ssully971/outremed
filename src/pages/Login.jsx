@@ -31,6 +31,24 @@ export default function Login() {
   }, [theme]);
 
   useEffect(() => {
+    if (vue !== 'landing') return;
+    const elements = document.querySelectorAll('.reveal');
+    const observateur = new IntersectionObserver(
+      (entrees) => {
+        entrees.forEach((entree) => {
+          if (entree.isIntersecting) {
+            entree.target.classList.add('visible');
+            observateur.unobserve(entree.target);
+          }
+        });
+      },
+      { threshold: 0.15 }
+    );
+    elements.forEach((el) => observateur.observe(el));
+    return () => observateur.disconnect();
+  }, [vue]);
+
+  useEffect(() => {
     async function charger() {
       const { data } = await supabase.from('parametres').select('cle, valeur').in('cle', ['whatsapp_contact', 'instagram_url']);
       (data || []).forEach((row) => {
@@ -177,7 +195,7 @@ export default function Login() {
 
           <div className="preview-section">
             <div className="preview-grid">
-              <div className="preview-card">
+              <div className="preview-card reveal" style={{ transitionDelay: '0s' }}>
                 <h3>Accueil étudiant</h3>
                 <p>Progression, derniers QCM, kholle en cours</p>
                 <div className="mini-subject"><span><span className="dot" style={{ background: '#ec4899' }} />Histologie</span><span className="mini-badge badge-progress">En cours</span></div>
@@ -185,7 +203,7 @@ export default function Login() {
                 <div className="mini-subject"><span><span className="dot" style={{ background: '#a78bfa' }} />Kholle du 30/08</span><span className="mini-badge badge-new">Nouveau</span></div>
               </div>
 
-              <div className="preview-card">
+              <div className="preview-card reveal" style={{ transitionDelay: '0.1s' }}>
                 <h3>Résultats & progression</h3>
                 <p>Historique de tentatives et meilleurs scores</p>
                 <div className="mini-stats-row">
@@ -196,7 +214,7 @@ export default function Login() {
                 <div className="mini-subject"><span><span className="dot" style={{ background: '#22c55e' }} />Physiologie</span><span className="mini-badge badge-done">92%</span></div>
               </div>
 
-              <div className="preview-card">
+              <div className="preview-card reveal" style={{ transitionDelay: '0.2s' }}>
                 <h3>Classement kholles</h3>
                 <p>Comparatif hebdomadaire entre étudiants</p>
                 <div className="mini-rank"><span className="pos">1</span>Camille R. — 19,5/20</div>
@@ -214,21 +232,21 @@ export default function Login() {
             </div>
 
             <div className="hiw-steps">
-              <div className="hiw-step">
+              <div className="hiw-step reveal" style={{ transitionDelay: '0s' }}>
                 <div className="hiw-num">1</div>
                 <div className="hiw-emoji">🎓</div>
                 <h3>Rejoins-nous</h3>
                 <p>Intègre notre groupe {whatsapp ? <a href={whatsapp} target="_blank" rel="noreferrer" className="hiw-link">WhatsApp</a> : 'WhatsApp'} pour être ajouté à la plateforme et suivre les annonces.</p>
               </div>
               <div className="hiw-arrow">→</div>
-              <div className="hiw-step">
+              <div className="hiw-step reveal" style={{ transitionDelay: '0.15s' }}>
                 <div className="hiw-num">2</div>
                 <div className="hiw-emoji">📚</div>
                 <h3>Révise</h3>
                 <p>Accède aux QCM par matière et participe aux kholles hebdomadaires pour t'entraîner en conditions réelles.</p>
               </div>
               <div className="hiw-arrow">→</div>
-              <div className="hiw-step">
+              <div className="hiw-step reveal" style={{ transitionDelay: '0.3s' }}>
                 <div className="hiw-num">3</div>
                 <div className="hiw-emoji">📈</div>
                 <h3>Progresse</h3>
@@ -238,15 +256,15 @@ export default function Login() {
           </div>
 
           <div className="mission-section">
-            <div className="mission-card">
+            <div className="mission-card reveal">
               <h2>Pourquoi Outremed</h2>
               <p className="mission-intro">Beaucoup d'étudiants en médecine d'outre-mer n'ont pas accès aux prépas privées. Outremed a été créé pour combler ce manque avec un accompagnement structuré et une plateforme adaptée à l'apprentissage en première année des filières MMOPK.</p>
 
               <div className="fact-grid">
-                <div className="fact-item"><span className="fact-emoji">🌴</span><div><h4>Pensé pour l'outre-mer</h4><p>Conçu spécifiquement pour les étudiants qui n'ont pas de prépa privée.</p></div></div>
-                <div className="fact-item"><span className="fact-emoji">✅</span><div><h4>Contenu vérifié</h4><p>QCM et kholles créés et validés par des tuteurs à votre disposition.</p></div></div>
-                <div className="fact-item"><span className="fact-emoji">🗓️</span><div><h4>Un rythme hebdomadaire</h4><p>Des kholles chaque semaine pour garder une progression régulière tout au long de l'année.</p></div></div>
-                <div className="fact-item"><span className="fact-emoji">🩺</span><div><h4>Adapté au programme MMOPK</h4><p>Un contenu pensé pour coller précisément au programme de première année des filières MMOPK.</p></div></div>
+                <div className="fact-item reveal" style={{ transitionDelay: '0s' }}><span className="fact-emoji">🌴</span><div><h4>Pensé pour l'outre-mer</h4><p>Conçu spécifiquement pour les étudiants qui n'ont pas de prépa privée.</p></div></div>
+                <div className="fact-item reveal" style={{ transitionDelay: '0.1s' }}><span className="fact-emoji">✅</span><div><h4>Contenu vérifié</h4><p>QCM et kholles créés et validés par des tuteurs à votre disposition.</p></div></div>
+                <div className="fact-item reveal" style={{ transitionDelay: '0.2s' }}><span className="fact-emoji">🗓️</span><div><h4>Un rythme hebdomadaire</h4><p>Des kholles chaque semaine pour garder une progression régulière tout au long de l'année.</p></div></div>
+                <div className="fact-item reveal" style={{ transitionDelay: '0.3s' }}><span className="fact-emoji">🩺</span><div><h4>Adapté au programme MMOPK</h4><p>Un contenu pensé pour coller précisément au programme de première année des filières MMOPK.</p></div></div>
               </div>
             </div>
           </div>
