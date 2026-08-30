@@ -114,6 +114,12 @@ export default function GestionQcm() {
     charger();
   }
 
+  async function supprimerSignalement(sig) {
+    if (!confirm('Retirer définitivement ce signalement de la liste ?')) return;
+    await supabase.from('signalements_erreur').delete().eq('id', sig.id);
+    charger();
+  }
+
   async function dupliquer(qcm) {
     const { data: session } = await supabase.auth.getSession();
     const uid = session.session.user.id;
@@ -203,7 +209,11 @@ export default function GestionQcm() {
     if (!confirm(`Supprimer définitivement "${qcm.titre}" ? Cette action est irréversible.`)) return;
     const { error } = await supabase.from('qcms').delete().eq('id', qcm.id);
     if (error) {
-      alert("Impossible de supprimer : des étudiants ont déjà des tentatives sur ce QCM. Utilise plutôt le masquage.");
+      if (error.code === '23503') {
+        alert("Impossible de supprimer : des étudiants ont déjà des tentatives sur ce QCM. Utilise plutôt le masquage pour le retirer sans perdre leurs résultats.");
+      } else {
+        alert('Erreur : ' + error.message);
+      }
       return;
     }
     charger();
@@ -326,31 +336,43 @@ export default function GestionQcm() {
       )}
 
       {afficherSignalements && (
-        <div className="card" style={{ marginBottom: 24 }}>
-          <h3 style={{ marginTop: 0 }}>Signalements d'erreur</h3>
-          {signalements.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Aucun signalement pour l'instant.</p>}
-          {signalements.map((s) => (
-            <div key={s.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)', opacity: s.traite ? 0.5 : 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
-                    {qcms.find((q) => q.id === s.qcm_id)?.titre || 'QCM supprimé'}
-                    {s.questions && ` — Q${s.questions.ordre}`}
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0' }}>
-                    Par {profilsMap[s.auteur_id] || '—'} · {new Date(s.created_at).toLocaleString('fr-FR')}
-                  </div>
-                  <div style={{ fontSize: '0.85rem' }}>{s.message}</div>
-                </div>
-                {!s.traite && (
-                  <button className="btn btn-outline btn-sm" onClick={() => marquerSignalementTraite(s)}>Marquer traité</button>
-                )}
-              </div>
-              {s.questions && (
-                <Link to={`/qcm/${s.qcm_id}?q=${s.questions.ordre}`} style={{ fontSize: '0.78rem', color: 'var(--accent)', textDecoration: 'none' }}>Voir la question →</Link>
-              )}
+        <div className="modal-overlay open" onClick={() => setAfficherSignalements(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="modal-box" style={{ maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>Signalements d'erreur</h3>
+              <button onClick={() => setAfficherSignalements(false)} style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
             </div>
-          ))}
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {signalements.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Aucun signalement pour l'instant.</p>}
+              {signalements.map((s) => (
+                <div key={s.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)', opacity: s.traite ? 0.5 : 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                        {qcms.find((q) => q.id === s.qcm_id)?.titre || 'QCM supprimé'}
+                        {s.questions && ` — Q${s.questions.ordre}`}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0' }}>
+                        Par {profilsMap[s.auteur_id] || '—'} · {new Date(s.created_at).toLocaleString('fr-FR')}
+                      </div>
+                      <div style={{ fontSize: '0.85rem' }}>{s.message}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {!s.traite && (
+                        <button className="btn btn-outline btn-sm" onClick={() => marquerSignalementTraite(s)}>Marquer traité</button>
+                      )}
+                      {s.traite && (
+                        <button className="icon-action danger" title="Supprimer de la liste" onClick={() => supprimerSignalement(s)}>🗑</button>
+                      )}
+                    </div>
+                  </div>
+                  {s.questions && (
+                    <Link to={`/qcm/${s.qcm_id}?q=${s.questions.ordre}`} style={{ fontSize: '0.78rem', color: 'var(--accent)', textDecoration: 'none' }}>Voir la question →</Link>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

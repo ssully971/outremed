@@ -1,82 +1,81 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL'),
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 );
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return new Response(JSON.stringify({ error: 'Non authentifié' }), { status: 401, headers: corsHeaders });
+  if (!authHeader) {
+    return new Response(JSON.stringify({ error: 'Non authentifié' }), { status: 401 });
+  }
 
   const token = authHeader.replace('Bearer ', '');
   const { data: caller } = await supabaseAdmin.auth.getUser(token);
-  if (!caller?.user) return new Response(JSON.stringify({ error: 'Session invalide' }), { status: 401, headers: corsHeaders });
-
-  const { qcm_id, reponses, temps_passe_secondes } = await req.json();
-  if (!qcm_id || !reponses) return new Response(JSON.stringify({ error: 'Données manquantes' }), { status: 400, headers: corsHeaders });
-
-  const { data: qcm } = await supabaseAdmin.from('qcms').select('*').eq('id', qcm_id).single();
-  if (!qcm) return new Response(JSON.stringify({ error: 'QCM introuvable' }), { status: 404, headers: corsHeaders });
-
-  if (qcm.type_qcm === 'concours_blanc') {
-    const { data: dejaFait } = await supabaseAdmin
-      .from('attempts')
-      .select('id')
-      .eq('qcm_id', qcm_id)
-      .eq('user_id', caller.user.id)
-      .limit(1);
-    if (dejaFait && dejaFait.length > 0) {
-      return new Response(JSON.stringify({ error: "Ce QCM ne peut être fait qu'une seule fois." }), { status: 403, headers: corsHeaders });
-    }
+  if (!caller?.user) {
+    return new Response(JSON.stringify({ error: 'Session invalide' }), { status: 401 });
   }
 
-  const { data: questions } = await supabaseAdmin
-    .from('questions')
-    .select('id, items(id, est_correct)')
-    .eq('qcm_id', qcm_id);
-
-  let score = 0;
-  const detail = [];
-
-  for (const q of questions) {
-    const reponse = reponses.find((r) => r.question_id === q.id);
-    const selectionnes = reponse ? reponse.items_selectionnes : [];
-
-    let erreurs = 0;
-    q.items.forEach((item) => {
-      const estSelectionne = selectionnes.includes(item.id);
-      if (item.est_correct && !estSelectionne) erreurs++;
-      if (!item.est_correct && estSelectionne) erreurs++;
-    });
-
-    const pts = erreurs === 0 ? 1 : erreurs === 1 ? 0.5 : 0;
-    score += pts;
-    detail.push({
-      question_id: q.id,
-      items_selectionnes: selectionnes,
-      statut: pts === 1 ? 'correct' : pts === 0.5 ? 'partiel' : 'incorrect',
-    });
-  }
-
-  const { data: attempt, error: attemptError } = await supabaseAdmin
-    .from('attempts')
-    .insert({ qcm_id, user_id: caller.user.id, score, temps_passe_secondes })
-    .select()
+  const { data: callerProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', caller.user.id)
     .single();
 
-  if (attemptError) return new Response(JSON.stringify({ error: attemptError.message }), { status: 400, headers: corsHeaders });
+  const { email, pseudo, role, statut_compte, essai_semaines, redirect_url } = await req.json();
 
-  await supabaseAdmin.from('attempt_answers').insert(
-    detail.map((d) => ({ attempt_id: attempt.id, ...d }))
-  );
+  if (!email || !pseudo || !role) {
+    return new Response(JSON.stringify({ error: 'Email, pseudo et rôle requis' }), { status: 400 });
+  }
 
-  return new Response(JSON.stringify({ score, detail }), { status: 200, headers: corsHeaders });
+  // Règles de permission : seul un propriétaire peut créer un tuteur.
+  // Un tuteur ou un propriétaire peut créer un étudiant.
+  if (role === 'tuteur' && callerProfile?.role !== 'proprietaire') {
+    return new Response(JSON.stringify({ error: 'Seul le propriétaire peut créer un compte tuteur' }), { status: 403 });
+  }
+  if (role === 'etudiant' && !['tuteur', 'proprietaire'].includes(callerProfile?.role)) {
+    return new Response(JSON.stringify({ error: 'Réservé aux tuteurs et au propriétaire' }), { status: 403 });
+  }
+  if (role === 'proprietaire') {
+    return new Response(JSON.stringify({ error: 'Impossible de créer un compte propriétaire par ce biais' }), { status: 403 });
+  }
+
+  const origineSite = redirect_url || 'https://outremed.vercel.app';
+  const { data: newUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${origineSite}/definir-mot-de-passe`,
+  });
+  if (inviteError) {
+    return new Response(JSON.stringify({ error: inviteError.message }), { status: 400 });
+  }
+
+  let essaiFin = null;
+  if (statut_compte === 'essai_gratuit') {
+    const fin = new Date();
+    fin.setDate(fin.getDate() + (essai_semaines === 2 ? 14 : 7));
+    essaiFin = fin.toISOString();
+  }
+
+  const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+    id: newUser.user.id,
+    pseudo,
+    role,
+    statut_compte: statut_compte || 'actif',
+    essai_fin: essaiFin,
+    cree_par: caller.user.id,
+  });
+
+  if (profileError) {
+    return new Response(JSON.stringify({ error: profileError.message }), { status: 400 });
+  }
+
+  // Historique — visible uniquement par le propriétaire
+  await supabaseAdmin.from('historique_comptes').insert({
+    action: role === 'tuteur' ? 'creation_tuteur' : 'creation_etudiant',
+    cible_id: newUser.user.id,
+    effectue_par: caller.user.id,
+    details: `${pseudo} (${email}) — statut : ${statut_compte || 'actif'}`,
+  });
+
+  return new Response(JSON.stringify({ success: true }), { status: 200 });
 });

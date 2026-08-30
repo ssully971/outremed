@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import NotificationBell from './NotificationBell';
@@ -34,7 +35,8 @@ export default function Navbar() {
 
       if (data) {
         document.documentElement.setAttribute('data-theme', data.theme_pref || 'dark');
-        const accent = data.accent_pref || '#FF3EB5';
+        const accentParDefaut = (data.theme_pref || 'dark') === 'dark' ? '#FF3EB5' : '#21323C';
+        const accent = data.accent_pref || accentParDefaut;
         document.documentElement.style.setProperty('--accent', accent);
         document.documentElement.style.setProperty('--accent-glow', accent + '33');
         document.documentElement.style.setProperty('--accent-soft', accent + '14');
@@ -153,7 +155,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {menuMobileOuvert && (
+      {menuMobileOuvert && createPortal(
         <>
           <div className="mobile-nav-overlay" onClick={() => setMenuMobileOuvert(false)} />
           <div className="mobile-nav-panel">
@@ -193,7 +195,8 @@ export default function Navbar() {
               Déconnexion
             </button>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </nav>
   );

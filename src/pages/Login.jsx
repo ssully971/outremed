@@ -62,7 +62,7 @@ export default function Login() {
   async function motDePasseOublie() {
     if (!email) { setErreur('Entre ton adresse mail ci-dessus, puis clique sur "Mot de passe oublié".'); return; }
     setMessageReset('');
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: 'http://localhost:5173/definir-mot-de-passe' });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/definir-mot-de-passe` });
     if (error) { setErreur(error.message); return; }
     setMessageReset('Un lien de réinitialisation a été envoyé à ton adresse mail.');
   }
@@ -181,7 +181,7 @@ export default function Login() {
           <div className="hero">
             <div className="hero-icon-wrap"><Logo theme={theme} height={220} /></div>
             <h1>La révision MMOPK,<br /><span className="accent-word">pensée pour l'outre-mer.</span></h1>
-            <p className="sub">🌺 Outremed accompagne les étudiants de 1re année sans accès à une prépa privée : kholles hebdomadaires, annales, concours blancs et suivi personnalisé. 🩺</p>
+            <p className="sub">🌺 Outremed accompagne tous les étudiants en première année visant les filières MMOPK : kholles hebdomadaires, annales, concours blancs et suivi personnalisé. Un site voué à votre réussite. 🩺</p>
 
             {whatsapp && <p className="hero-trial-note">📩 <strong>Contacte-nous</strong> pour bénéficier d'un essai gratuit et découvrir la plateforme.</p>}
 

@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Seul le propriétaire peut supprimer un compte tuteur' }), { status: 403, headers: corsHeaders });
   }
 
+  // On détache d'abord ce compte des tables qu'il a créées/modifiées, pour ne pas les supprimer par erreur
   await supabaseAdmin.from('qcms').update({ cree_par: null }).eq('cree_par', user_id);
   await supabaseAdmin.from('qcms').update({ verifie_par: null }).eq('verifie_par', user_id);
   await supabaseAdmin.from('qcms').update({ modifie_par: null }).eq('modifie_par', user_id);
@@ -46,10 +47,19 @@ Deno.serve(async (req) => {
   await supabaseAdmin.from('semaines_kholle').update({ cree_par: null }).eq('cree_par', user_id);
   await supabaseAdmin.from('semaines_kholle').update({ modifie_par: null }).eq('modifie_par', user_id);
   await supabaseAdmin.from('profiles').update({ cree_par: null }).eq('cree_par', user_id);
+  await supabaseAdmin.from('matieres').update({ cree_par: null }).eq('cree_par', user_id);
+  await supabaseAdmin.from('cours').update({ cree_par: null }).eq('cree_par', user_id);
+  await supabaseAdmin.from('echeances').update({ cree_par: null }).eq('cree_par', user_id);
+  await supabaseAdmin.from('annonces').update({ cree_par: null }).eq('cree_par', user_id);
+  await supabaseAdmin.from('messages').update({ supprime_par: null }).eq('supprime_par', user_id);
+  await supabaseAdmin.from('signalements_erreur').update({ auteur_id: null }).eq('auteur_id', user_id);
+  await supabaseAdmin.from('signalements_erreur').update({ traite_par: null }).eq('traite_par', user_id);
 
+  // Historique des comptes : on garde les lignes, on détache juste la référence au compte supprimé
   await supabaseAdmin.from('historique_comptes').update({ cible_id: null }).eq('cible_id', user_id);
   await supabaseAdmin.from('historique_comptes').update({ effectue_par: null }).eq('effectue_par', user_id);
 
+  // On trace la suppression elle-même, avant que le compte ne disparaisse
   await supabaseAdmin.from('historique_comptes').insert({
     action: 'suppression_definitive',
     cible_id: null,
@@ -69,6 +79,7 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Ses propres données
   const { data: sesAttempts } = await supabaseAdmin.from('attempts').select('id').eq('user_id', user_id);
   const attemptIds = (sesAttempts || []).map((a) => a.id);
   if (attemptIds.length > 0) {
@@ -77,8 +88,11 @@ Deno.serve(async (req) => {
   await supabaseAdmin.from('attempts').delete().eq('user_id', user_id);
   await supabaseAdmin.from('notifications').delete().eq('user_id', user_id);
   await supabaseAdmin.from('canal_membres').delete().eq('user_id', user_id);
+  await supabaseAdmin.from('canal_dernier_vu').delete().eq('user_id', user_id);
+  await supabaseAdmin.from('annonces_vues').delete().eq('user_id', user_id);
   await supabaseAdmin.from('messages').delete().eq('auteur_id', user_id);
 
+  // Le profil, puis le compte d'authentification
   await supabaseAdmin.from('profiles').delete().eq('id', user_id);
   const { error: erreurAuth } = await supabaseAdmin.auth.admin.deleteUser(user_id);
   if (erreurAuth) return new Response(JSON.stringify({ error: erreurAuth.message }), { status: 400, headers: corsHeaders });

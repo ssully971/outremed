@@ -239,18 +239,27 @@ export default function QcmDetail() {
     const { data: session } = await supabase.auth.getSession();
     const dureeSec = (qcm.duree_minutes || 30) * 60;
 
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grade-qcm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-      body: JSON.stringify({ qcm_id: id, reponses: payload, temps_passe_secondes: dureeSec - timeLeft }),
-    });
-    const result = await res.json();
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grade-qcm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+        body: JSON.stringify({ qcm_id: id, reponses: payload, temps_passe_secondes: dureeSec - timeLeft }),
+      });
+      let result;
+      try {
+        result = await res.json();
+      } catch {
+        result = {};
+      }
 
-    if (!res.ok) { setErreur(result.error); return; }
-    localStorage.removeItem(clePause);
-    setFinalScore(result.score);
-    construireCorrection();
-    setFinished(true);
+      if (!res.ok) { setErreur(result.error || "Une erreur est survenue lors de l'enregistrement. Réessaie, et si ça persiste, préviens ton tuteur."); return; }
+      localStorage.removeItem(clePause);
+      setFinalScore(result.score);
+      construireCorrection();
+      setFinished(true);
+    } catch (err) {
+      setErreur("Impossible de contacter le serveur pour enregistrer ta tentative. Vérifie ta connexion et réessaie.");
+    }
   }
 
   function construireCorrection() {
@@ -329,7 +338,9 @@ export default function QcmDetail() {
     if (!q) return <div className="container">Aucune question.</div>;
     return (
       <div className="container" style={{ maxWidth: 760 }}>
-        {qcm.est_prive && <Link to="/espace-perso" className="home-btn" style={{ marginBottom: 16, display: 'inline-flex' }}>← Espace perso</Link>}
+        {qcm.est_prive
+          ? <Link to="/espace-perso" className="home-btn" style={{ marginBottom: 16, display: 'inline-flex' }}>← Espace perso</Link>
+          : <Link to="/qcm/gerer" className="home-btn" style={{ marginBottom: 16, display: 'inline-flex' }}>← Gérer les QCM</Link>}
         <div className="card">
           <div className="question-meta">
             <span>Aperçu — Question {apercuIndex + 1}/{questions.length}</span>
@@ -466,7 +477,7 @@ export default function QcmDetail() {
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 15, marginTop: 40 }}>
           <Link to={qcm.est_prive ? '/espace-perso' : '/qcm'} className="btn btn-outline" style={{ textDecoration: 'none' }}>
-            {qcm.est_prive ? "Retour à l'espace perso" : "Retour à l'index"}
+            {qcm.est_prive ? "Retour à l'espace perso" : "Retour aux QCM"}
           </Link>
         </div>
       </div>

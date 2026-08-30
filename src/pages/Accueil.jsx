@@ -313,9 +313,12 @@ export default function Accueil() {
 
           {profil.role === 'proprietaire' && comptesAActiver.length > 0 && (
             <section>
-              <div className="section-title"><h3>Comptes à activer</h3></div>
+              <div className="section-title">
+                <h3>Comptes à activer</h3>
+                {comptesAActiver.length > 5 && <Link to="/comptes">Voir tout ({comptesAActiver.length}) →</Link>}
+              </div>
               <div className="side-card">
-                {comptesAActiver.map((e) => (
+                {comptesAActiver.slice(0, 5).map((e) => (
                   <div key={e.id} className="rank-item">
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700 }}>{e.pseudo}</div>
@@ -330,9 +333,12 @@ export default function Accueil() {
 
           {profil.role === 'proprietaire' && equipeTuteurs.length > 0 && (
             <section>
-              <div className="section-title"><h3>Équipe de tuteurs</h3></div>
+              <div className="section-title">
+                <h3>Équipe de tuteurs</h3>
+                {equipeTuteurs.length > 5 && <Link to="/comptes">Voir tout ({equipeTuteurs.length}) →</Link>}
+              </div>
               <div className="side-card">
-                {equipeTuteurs.map((t) => (
+                {equipeTuteurs.slice(0, 5).map((t) => (
                   <Link key={t.id} to={`/tuteurs/${t.id}`} className="rank-item" style={{ textDecoration: 'none', color: 'var(--text-main)' }}>
                     <span style={{ flex: 1 }}>{t.pseudo}</span>
                     <span className="score">{t.qcmAjoutes} QCM · {t.validationsMois} validations</span>

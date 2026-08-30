@@ -159,7 +159,7 @@ export default function Profil() {
 
   const couleursCommunes = ['#E91E8C', '#2FA8A0', '#7FB88F', '#C9B6E4', '#FF8A65'];
   const couleursSombre = [...couleursCommunes, '#EAF2F7', '#FAF9F7', '#F7D9E8'];
-  const couleursClair = [...couleursCommunes, '#1B2A4A', '#33363D'];
+  const couleursClair = [...couleursCommunes, '#21323C', '#33363D'];
   const palette = themePref === 'dark' ? couleursSombre : couleursClair;
 
   if (!profil) return <div style={{ padding: 40 }}>Chargement...</div>;

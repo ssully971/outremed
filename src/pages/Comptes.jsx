@@ -87,7 +87,7 @@ export default function Comptes() {
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-      body: JSON.stringify({ email, pseudo, role, statut_compte: statutCompte, essai_semaines: essaiSemaines }),
+      body: JSON.stringify({ email, pseudo, role, statut_compte: statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin }),
     });
 
     const result = await res.json();

@@ -151,8 +151,20 @@ export default function EspacePerso() {
   }
 
   async function supprimer(qcm) {
-    if (!confirm(`Supprimer définitivement "${qcm.titre}" ?`)) return;
-    await supabase.from('qcms').delete().eq('id', qcm.id);
+    if (!confirm(`Supprimer définitivement "${qcm.titre}" et toutes tes tentatives dessus ?`)) return;
+
+    const { data: mesQuestions } = await supabase.from('questions').select('id').eq('qcm_id', qcm.id);
+    const questionIds = (mesQuestions || []).map((q) => q.id);
+    const { data: mesAttempts } = await supabase.from('attempts').select('id').eq('qcm_id', qcm.id);
+    const attemptIds = (mesAttempts || []).map((a) => a.id);
+
+    if (attemptIds.length > 0) await supabase.from('attempt_answers').delete().in('attempt_id', attemptIds);
+    if (attemptIds.length > 0) await supabase.from('attempts').delete().eq('qcm_id', qcm.id);
+    if (questionIds.length > 0) await supabase.from('items').delete().in('question_id', questionIds);
+    await supabase.from('questions').delete().eq('qcm_id', qcm.id);
+
+    const { error } = await supabase.from('qcms').delete().eq('id', qcm.id);
+    if (error) { alert('Erreur : ' + error.message); return; }
     charger();
   }
 

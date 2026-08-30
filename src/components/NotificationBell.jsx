@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 
@@ -121,7 +122,7 @@ export default function NotificationBell() {
         )}
       </div>
 
-      {popupOuverte && (
+      {popupOuverte && createPortal(
         <div className="modal-overlay open" onClick={() => setPopupOuverte(false)}>
           <div onClick={(e) => e.stopPropagation()} className="modal-box" style={{ maxWidth: 500, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -161,7 +162,8 @@ export default function NotificationBell() {
               {notificationsFiltrees.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Aucun résultat.</p>}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
