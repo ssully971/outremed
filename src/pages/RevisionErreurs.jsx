@@ -22,13 +22,17 @@ export default function RevisionErreurs() {
         qcm_id: searchParams.get('qcm') || undefined,
       };
 
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/revision-erreurs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-        body: JSON.stringify(body),
-      });
-      const result = await res.json();
-      setQuestions(result.questions || []);
+      try {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/revision-erreurs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+          body: JSON.stringify(body),
+        });
+        const result = await res.json().catch(() => ({}));
+        setQuestions(result.questions || []);
+      } catch (err) {
+        setQuestions([]);
+      }
     }
     charger();
   }, []);

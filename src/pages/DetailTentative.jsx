@@ -13,14 +13,18 @@ export default function DetailTentative() {
     async function charger() {
       const { data: session } = await supabase.auth.getSession();
       setMonId(session.session.user.id);
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/attempt-detail`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-        body: JSON.stringify({ attempt_id: attemptId }),
-      });
-      const result = await res.json();
-      if (!res.ok) { setErreur(result.error); return; }
-      setDonnees(result);
+      try {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/attempt-detail`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+          body: JSON.stringify({ attempt_id: attemptId }),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) { setErreur(result.error || "Une erreur est survenue lors du chargement."); return; }
+        setDonnees(result);
+      } catch (err) {
+        setErreur("Impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
+      }
     }
     charger();
   }, [attemptId]);

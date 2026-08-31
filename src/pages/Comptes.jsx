@@ -95,16 +95,23 @@ export default function Comptes() {
 
     const { data: session } = await supabase.auth.getSession();
 
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-      body: JSON.stringify({ email, pseudo, role, statut_compte: categorieCompte === 'annale' ? 'actif' : statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin, categorie_compte: role === 'etudiant' ? (categorieCompte || null) : null }),
-    });
+    let res, result;
+    try {
+      res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+        body: JSON.stringify({ email, pseudo, role, statut_compte: categorieCompte === 'annale' ? 'actif' : statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin, categorie_compte: role === 'etudiant' ? (categorieCompte || null) : null }),
+      });
+      result = await res.json().catch(() => ({}));
+    } catch (err) {
+      setEnCours(false);
+      setMessage("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
+      return;
+    }
 
-    const result = await res.json();
     setEnCours(false);
 
-    if (!res.ok) { setMessage('Erreur : ' + result.error); return; }
+    if (!res.ok) { setMessage('Erreur : ' + (result.error || 'une erreur inconnue est survenue.')); return; }
 
     setMessage(`Compte créé — un email d'invitation a été envoyé à ${email}.`);
 
@@ -166,14 +173,21 @@ export default function Comptes() {
   async function supprimerTuteur(tuteur) {
     setSuppressionEnCours(true);
     const { data: session } = await supabase.auth.getSession();
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-      body: JSON.stringify({ user_id: tuteur.id }),
-    });
-    const result = await res.json();
+    let res, result;
+    try {
+      res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+        body: JSON.stringify({ user_id: tuteur.id }),
+      });
+      result = await res.json().catch(() => ({}));
+    } catch (err) {
+      setSuppressionEnCours(false);
+      alert("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
+      return;
+    }
     setSuppressionEnCours(false);
-    if (!res.ok) { alert('Erreur : ' + result.error); return; }
+    if (!res.ok) { alert('Erreur : ' + (result.error || 'une erreur inconnue est survenue.')); return; }
     setSuppressionOuverte(null);
     setConfirmationTexte('');
     charger();

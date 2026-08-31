@@ -130,14 +130,21 @@ export default function FicheEtudiant() {
   async function supprimerDefinitivement() {
     setSuppressionEnCours(true);
     const { data: session } = await supabase.auth.getSession();
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-      body: JSON.stringify({ user_id: id }),
-    });
-    const result = await res.json();
+    let res, result;
+    try {
+      res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+        body: JSON.stringify({ user_id: id }),
+      });
+      result = await res.json().catch(() => ({}));
+    } catch (err) {
+      setSuppressionEnCours(false);
+      alert("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
+      return;
+    }
     setSuppressionEnCours(false);
-    if (!res.ok) { alert('Erreur : ' + result.error); return; }
+    if (!res.ok) { alert('Erreur : ' + (result.error || 'une erreur inconnue est survenue.')); return; }
     navigate('/comptes');
   }
 
