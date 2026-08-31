@@ -51,8 +51,10 @@ Deno.serve(async (req) => {
     }
 
     const origineSite = redirect_url || 'https://outremed.vercel.app';
+    const libelleRole = categorie_compte === 'annale' ? 'étudiant annale' : role === 'tuteur' ? 'tuteur' : 'étudiant';
     const { data: newUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${origineSite}/definir-mot-de-passe`,
+      data: { pseudo, libelle_role: libelleRole },
     });
     if (inviteError) {
       return new Response(JSON.stringify({ error: inviteError.message }), { status: 400, headers: corsHeaders });
