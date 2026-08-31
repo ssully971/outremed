@@ -93,7 +93,9 @@ Deno.serve(async (req) => {
   await supabaseAdmin.from('messages').delete().eq('auteur_id', user_id);
 
   // Le profil, puis le compte d'authentification
-  await supabaseAdmin.from('profiles').delete().eq('id', user_id);
+  const { error: erreurProfil } = await supabaseAdmin.from('profiles').delete().eq('id', user_id);
+  if (erreurProfil) return new Response(JSON.stringify({ error: `Suppression du profil bloquée : ${erreurProfil.message}` }), { status: 400, headers: corsHeaders });
+
   const { error: erreurAuth } = await supabaseAdmin.auth.admin.deleteUser(user_id);
   if (erreurAuth) return new Response(JSON.stringify({ error: erreurAuth.message }), { status: 400, headers: corsHeaders });
 

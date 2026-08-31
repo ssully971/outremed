@@ -208,14 +208,27 @@ export default function GestionQcm() {
   async function supprimer(qcm) {
     if (!confirm(`Supprimer définitivement "${qcm.titre}" ? Cette action est irréversible.`)) return;
     const { error } = await supabase.from('qcms').delete().eq('id', qcm.id);
-    if (error) {
-      if (error.code === '23503') {
-        alert("Impossible de supprimer : des étudiants ont déjà des tentatives sur ce QCM. Utilise plutôt le masquage pour le retirer sans perdre leurs résultats.");
-      } else {
-        alert('Erreur : ' + error.message);
-      }
+    if (!error) { charger(); return; }
+
+    if (error.code !== '23503') { alert('Erreur : ' + error.message); return; }
+
+    if (monRole !== 'proprietaire') {
+      alert("Impossible de supprimer : des étudiants ont déjà des tentatives sur ce QCM. Utilise plutôt le masquage pour le retirer sans perdre leurs résultats.");
       return;
     }
+
+    const confirmForce = confirm(
+      "Des étudiants ont déjà des tentatives sur ce QCM. En tant que propriétaire, tu peux forcer la suppression, mais leurs résultats sur ce QCM seront perdus définitivement et irrémédiablement. Continuer ?"
+    );
+    if (!confirmForce) return;
+
+    const { data: mesAttempts } = await supabase.from('attempts').select('id').eq('qcm_id', qcm.id);
+    const attemptIds = (mesAttempts || []).map((a) => a.id);
+    if (attemptIds.length > 0) await supabase.from('attempt_answers').delete().in('attempt_id', attemptIds);
+    await supabase.from('attempts').delete().eq('qcm_id', qcm.id);
+
+    const { error: erreurForcee } = await supabase.from('qcms').delete().eq('id', qcm.id);
+    if (erreurForcee) { alert('Erreur : ' + erreurForcee.message); return; }
     charger();
   }
 
