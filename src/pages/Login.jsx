@@ -77,6 +77,10 @@ export default function Login() {
 
     const { data: profil } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
 
+    if (profil?.theme_pref) {
+      localStorage.setItem('outremed_theme_landing', profil.theme_pref);
+    }
+
     if (!profil || !profil.compte_actif || profil.statut_compte === 'suspendu') {
       await supabase.auth.signOut();
       setErreur('Ton compte est désactivé ou suspendu. Contacte ton tuteur.');
@@ -110,20 +114,22 @@ export default function Login() {
         </div>
 
         <div className="landing-nav-right">
-          {theme === 'dark' && vue === 'landing' && (
-            <div className="theme-callout">
-              <span className="callout-text">essaie notre mode clair ;)</span>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12 L17 12" />
-                <path d="M12 6 L18 12 L12 18" />
-              </svg>
-            </div>
-          )}
+          <div className="theme-toggle-group">
+            {theme === 'dark' && vue === 'landing' && (
+              <div className="theme-callout">
+                <span className="callout-text">essaie notre mode clair ;)</span>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12 L17 12" />
+                  <path d="M12 6 L18 12 L12 18" />
+                </svg>
+              </div>
+            )}
 
-          <button className="theme-switch-btn" onClick={basculerTheme}>
-            <span className="ts-label">{theme === 'dark' ? 'Mode sombre' : 'Mode clair'}</span>
-            <div className="ts-track"><div className="ts-knob">{theme === 'dark' ? '🌙' : '☀️'}</div></div>
-          </button>
+            <button className="theme-switch-btn" onClick={basculerTheme}>
+              <span className="ts-label">{theme === 'dark' ? 'Mode sombre' : 'Mode clair'}</span>
+              <div className="ts-track"><div className="ts-knob">{theme === 'dark' ? '🌙' : '☀️'}</div></div>
+            </button>
+          </div>
 
           {vue === 'landing' && (
             <>

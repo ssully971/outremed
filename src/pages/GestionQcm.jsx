@@ -201,6 +201,7 @@ export default function GestionQcm() {
   }
 
   async function basculerVisibilite(qcm) {
+    if (qcm.visible && !confirm(`Masquer "${qcm.titre}" ? Il ne sera plus visible des étudiants (tu pourras le remontrer à tout moment).`)) return;
     await supabase.from('qcms').update({ visible: !qcm.visible }).eq('id', qcm.id);
     charger();
   }
@@ -472,6 +473,17 @@ export default function GestionQcm() {
           </div>
         </div>
       )}
+
+      <div className="icon-legend">
+        <span>👁 Voir / modifier</span>
+        <span>📤 Publier</span>
+        <span>✓ Valider</span>
+        <span>🗄 Masquer</span>
+        <span>👁‍🗨 Remontrer</span>
+        <span>📋 Dupliquer</span>
+        <span>🕒 Historique</span>
+        <span>🗑 Supprimer</span>
+      </div>
 
       <div className="qcm-manage-list">
         {filtre === 'masques' ? (
