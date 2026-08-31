@@ -104,7 +104,6 @@ export default function FicheEtudiant() {
       effectue_par: session.session.user.id,
       details: `${etudiant.pseudo} → ${nouveauStatutCompte}${nouveauCompteActif ? '' : ' (désactivé)'}`,
     });
-
     await envoyerNotification(
       id, 'abonnement',
       nouveauCompteActif ? 'Ton abonnement a été activé.' : 'Ton compte a été désactivé. Contacte ton tuteur.',
@@ -124,6 +123,18 @@ export default function FicheEtudiant() {
       );
     }
 
+    charger();
+  }
+
+  async function changerCategorie(nouvelleCategorie) {
+    const { data: session } = await supabase.auth.getSession();
+    await supabase.from('profiles').update({ categorie_compte: nouvelleCategorie || null }).eq('id', id);
+    await supabase.from('historique_comptes').insert({
+      action: 'changement_categorie',
+      cible_id: id,
+      effectue_par: session.session.user.id,
+      details: `${etudiant.pseudo} → ${nouvelleCategorie === 'annale' ? 'étudiant annale' : 'étudiant normal'}`,
+    });
     charger();
   }
 
@@ -366,6 +377,16 @@ export default function FicheEtudiant() {
 
       <div className="settings-card">
         <h3>Gestion du compte</h3>
+
+        <div className="field">
+          <label>Catégorie</label>
+          <select value={etudiant.categorie_compte || ''} onChange={(e) => changerCategorie(e.target.value)}>
+            <option value="">Étudiant normal</option>
+            <option value="annale">Étudiant annale</option>
+          </select>
+          <p className="field-hint">Un étudiant annale ne voit que les QCM, quel que soit le mode actuel du site.</p>
+        </div>
+
         <div className="detail-actions-row" style={{ paddingTop: 0, borderTop: 'none', marginTop: 0 }}>
           {etudiant.compte_actif && etudiant.statut_compte !== 'suspendu' ? (
             <button className="btn btn-warning-outline" onClick={() => changerStatut('suspendu', true)}>Suspendre l'abonnement</button>

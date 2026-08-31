@@ -150,13 +150,9 @@ export default function Profil() {
   }
 
   async function changerModeSite(nouveauMode) {
-    if (params.mode_site === 'annale' && nouveauMode === 'normal') {
-      if (!confirm("Repasser en mode normal va désactiver tous les comptes étudiant-annale, pour laisser la place aux comptes étudiants normaux. Tu pourras les réactiver manuellement plus tard si besoin. Continuer ?")) return;
-      await supabase.from('profiles').update({ compte_actif: false }).eq('categorie_compte', 'annale');
-    }
     await supabase.from('parametres').update({ valeur: nouveauMode }).eq('cle', 'mode_site');
     majParam('mode_site', nouveauMode);
-    setMessageParams(nouveauMode === 'annale' ? 'Mode Annale activé.' : 'Mode Normal réactivé — les comptes étudiant-annale ont été désactivés.');
+    setMessageParams(nouveauMode === 'annale' ? 'Mode Annale activé.' : 'Mode Normal réactivé — les comptes étudiant-annale restent actifs et continuent de ne voir que les QCM.');
   }
 
   async function enregistrerParametres() {
@@ -346,6 +342,8 @@ export default function Profil() {
             <p className="desc">
               Le mode Annale restreint le site aux QCM d'annales : les tuteurs ne gèrent que les comptes étudiant-annale et les QCM,
               les étudiants annale ne voient que les QCM. Le reste du site (Forum, Planning, Classement...) reste réservé à toi seul pendant ce temps.
+              Un compte étudiant-annale reste restreint aux QCM même après un retour au mode Normal — tu peux à tout moment le désactiver
+              ou changer sa catégorie depuis Comptes si tu veux qu'il redevienne un étudiant normal.
             </p>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Mode actuel</label>
