@@ -11,6 +11,10 @@ export default function Navbar() {
   const [menuMobileOuvert, setMenuMobileOuvert] = useState(false);
   const [forumActif, setForumActif] = useState(true);
   const [planningActif, setPlanningActif] = useState(true);
+  const [classementActif, setClassementActif] = useState(true);
+  const [carnetErreursActif, setCarnetErreursActif] = useState(true);
+  const [mesStatsActif, setMesStatsActif] = useState(true);
+  const [modeSite, setModeSite] = useState('normal');
   const navigate = useNavigate();
   const location = useLocation();
   const refAdmin = useRef(null);
@@ -42,10 +46,17 @@ export default function Navbar() {
         document.documentElement.style.setProperty('--accent-soft', accent + '14');
       }
 
-      const { data: paramF } = await supabase.from('parametres').select('valeur').eq('cle', 'forum_actif').single();
-      setForumActif(paramF?.valeur !== 'false');
-      const { data: paramP } = await supabase.from('parametres').select('valeur').eq('cle', 'planning_actif').single();
-      setPlanningActif(paramP?.valeur !== 'false');
+      const { data: params } = await supabase.from('parametres').select('cle, valeur').in('cle', [
+        'forum_actif', 'planning_actif', 'classement_actif', 'carnet_erreurs_actif', 'mes_stats_actif', 'mode_site',
+      ]);
+      const map = {};
+      (params || []).forEach((p) => { map[p.cle] = p.valeur; });
+      setForumActif(map.forum_actif !== 'false');
+      setPlanningActif(map.planning_actif !== 'false');
+      setClassementActif(map.classement_actif !== 'false');
+      setCarnetErreursActif(map.carnet_erreurs_actif !== 'false');
+      setMesStatsActif(map.mes_stats_actif !== 'false');
+      setModeSite(map.mode_site || 'normal');
     }
     charger();
     setMenuAdminOuvert(false);
@@ -71,17 +82,47 @@ export default function Navbar() {
   if (!profil) return null;
 
   const estAdmin = profil.role === 'tuteur' || profil.role === 'proprietaire';
+  const estProprietaire = profil.role === 'proprietaire';
+  const modeAnnale = modeSite === 'annale';
+  const estEtudiantAnnale = profil.role === 'etudiant' && profil.categorie_compte === 'annale';
+  const estTuteurRestreint = profil.role === 'tuteur' && modeAnnale;
   const initiales = profil.pseudo.slice(0, 2).toUpperCase();
+
+  // En mode annale, un tuteur ou un étudiant-annale ne doit pas voir Classement/Forum/Planning
+  const voirPagesEtendues = !estEtudiantAnnale && !estTuteurRestreint;
 
   function lienClasse(path) {
     return location.pathname === path ? 'active' : '';
   }
 
+  const contenuLiensPrincipaux = (
+    <>
+      <Link to="/accueil" className={lienClasse('/accueil')}>Accueil</Link>
+
+      {!estAdmin && (
+        <>
+          <Link to="/qcm" className={lienClasse('/qcm')}>QCM</Link>
+          {!estEtudiantAnnale && (
+            <>
+              <Link to="/resultats" className={lienClasse('/resultats')}>Résultats</Link>
+              {(carnetErreursActif || estProprietaire) && <Link to="/carnet-erreurs" className={lienClasse('/carnet-erreurs')}>Carnet{!carnetErreursActif && ' 🔒'}</Link>}
+              {(mesStatsActif || estProprietaire) && <Link to="/mes-stats" className={lienClasse('/mes-stats')}>Mes stats{!mesStatsActif && ' 🔒'}</Link>}
+            </>
+          )}
+        </>
+      )}
+
+      {voirPagesEtendues && (classementActif || estProprietaire) && <Link to="/classement" className={lienClasse('/classement')}>Classement{!classementActif && ' 🔒'}</Link>}
+      {voirPagesEtendues && (forumActif || estProprietaire) && <Link to="/forum" className={lienClasse('/forum')}>Forum{!forumActif && ' 🔒'}</Link>}
+      {voirPagesEtendues && (planningActif || estProprietaire) && <Link to="/planning" className={lienClasse('/planning')}>Planning{!planningActif && ' 🔒'}</Link>}
+    </>
+  );
+
   return (
     <nav className="navbar">
       <div
         className="logo"
-        style={{ cursor: profil.role === 'proprietaire' ? 'pointer' : 'default', display: 'flex', alignItems: 'center' }}
+        style={{ cursor: profil.role === 'proprietaire' ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 12 }}
         onDoubleClick={() => { if (profil.role === 'proprietaire') navigate('/espace-perso'); }}
       >
         <img
@@ -89,23 +130,13 @@ export default function Navbar() {
           alt="Outremed"
           style={{ height: 52, width: 'auto', display: 'block' }}
         />
+        {modeAnnale && estProprietaire && (
+          <Link to="/profil" className="mode-annale-badge" onClick={(e) => e.stopPropagation()}>🎓 Mode Annale actif</Link>
+        )}
       </div>
 
       <div className="nav-links">
-        <Link to="/accueil" className={lienClasse('/accueil')}>Accueil</Link>
-
-        {!estAdmin && (
-          <>
-            <Link to="/qcm" className={lienClasse('/qcm')}>QCM</Link>
-            <Link to="/resultats" className={lienClasse('/resultats')}>Résultats</Link>
-            <Link to="/carnet-erreurs" className={lienClasse('/carnet-erreurs')}>Carnet</Link>
-            <Link to="/mes-stats" className={lienClasse('/mes-stats')}>Mes stats</Link>
-          </>
-        )}
-
-        <Link to="/classement" className={lienClasse('/classement')}>Classement</Link>
-        {(forumActif || profil.role === 'proprietaire') && <Link to="/forum" className={lienClasse('/forum')}>Forum{!forumActif && ' 🔒'}</Link>}
-        {(planningActif || profil.role === 'proprietaire') && <Link to="/planning" className={lienClasse('/planning')}>Planning{!planningActif && ' 🔒'}</Link>}
+        {contenuLiensPrincipaux}
 
         {estAdmin && (
           <div ref={refAdmin} style={{ position: 'relative' }}>
@@ -144,7 +175,7 @@ export default function Navbar() {
             <div className="dropdown-menu" style={{ top: '130%', right: 0, minWidth: 190 }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{profil.pseudo}</div>
-                <span className="role-badge">{profil.role}</span>
+                <span className="role-badge">{profil.role}{estEtudiantAnnale && ' (annale)'}</span>
               </div>
               <Link to="/profil" className="dropdown-item">Mon profil</Link>
               <button onClick={seDeconnecter} className="dropdown-item" style={{ color: 'var(--error)' }}>
@@ -164,20 +195,7 @@ export default function Navbar() {
               <button onClick={() => setMenuMobileOuvert(false)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
             </div>
 
-            <Link to="/accueil" className={lienClasse('/accueil')}>Accueil</Link>
-
-            {!estAdmin && (
-              <>
-                <Link to="/qcm" className={lienClasse('/qcm')}>QCM</Link>
-                <Link to="/resultats" className={lienClasse('/resultats')}>Résultats</Link>
-                <Link to="/carnet-erreurs" className={lienClasse('/carnet-erreurs')}>Carnet</Link>
-                <Link to="/mes-stats" className={lienClasse('/mes-stats')}>Mes stats</Link>
-              </>
-            )}
-
-            <Link to="/classement" className={lienClasse('/classement')}>Classement</Link>
-            {(forumActif || profil.role === 'proprietaire') && <Link to="/forum" className={lienClasse('/forum')}>Forum{!forumActif && ' 🔒'}</Link>}
-            {(planningActif || profil.role === 'proprietaire') && <Link to="/planning" className={lienClasse('/planning')}>Planning{!planningActif && ' 🔒'}</Link>}
+            {contenuLiensPrincipaux}
 
             {estAdmin && (
               <>

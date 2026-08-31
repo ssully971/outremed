@@ -48,6 +48,19 @@ export default function PopupMatieres({ onFermer }) {
     charger();
   }
 
+  async function renommerCours(cours, nouveauNom) {
+    if (!nouveauNom.trim() || nouveauNom.trim() === cours.nom) return;
+    await supabase.from('cours').update({ nom: nouveauNom.trim() }).eq('id', cours.id);
+    charger();
+  }
+
+  async function supprimerCours(cours) {
+    if (!confirm(`Supprimer le cours "${cours.nom}" ? Les QCM qui y étaient liés resteront mais ne seront plus rattachés à un cours précis.`)) return;
+    await supabase.from('qcms').update({ cours_id: null }).eq('cours_id', cours.id);
+    await supabase.from('cours').delete().eq('id', cours.id);
+    charger();
+  }
+
   function ouvrirEdition(m) {
     setEditionOuverte(editionOuverte === m.id ? null : m.id);
     setNomEdition(m.nom);
@@ -138,7 +151,16 @@ export default function PopupMatieres({ onFermer }) {
                 </div>
 
                 {m.cours.map((c) => (
-                  <div key={c.id} style={{ fontSize: '0.82rem', color: 'var(--text-muted)', padding: '2px 0' }}>— {c.nom}</div>
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>—</span>
+                    <input
+                      defaultValue={c.nom}
+                      onBlur={(e) => renommerCours(c, e.target.value)}
+                      style={{ flex: 1, fontSize: '0.82rem', padding: '4px 8px', border: '1px solid transparent', background: 'transparent' }}
+                      onFocus={(e) => { e.target.style.border = '1px solid var(--border)'; e.target.style.background = 'var(--bg-panel)'; }}
+                    />
+                    <button className="icon-action danger" style={{ width: 22, height: 22, fontSize: '0.75rem' }} title="Supprimer ce cours" onClick={() => supprimerCours(c)}>🗑</button>
+                  </div>
                 ))}
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <input

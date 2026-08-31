@@ -17,8 +17,9 @@ export default function Resultats() {
       if (!session.session) { navigate('/'); return; }
       const uid = session.session.user.id;
 
-      const { data: moi } = await supabase.from('profiles').select('role').eq('id', uid).single();
+      const { data: moi } = await supabase.from('profiles').select('role, categorie_compte').eq('id', uid).single();
       setMonRole(moi?.role);
+      if (moi?.role === 'etudiant' && moi?.categorie_compte === 'annale') { navigate('/accueil'); return; }
 
       const { data: mats } = await supabase.from('matieres').select('*').order('nom');
       setMatieres(mats || []);

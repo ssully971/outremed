@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     .eq('id', caller.user.id)
     .single();
 
-  const { email, pseudo, role, statut_compte, essai_semaines, redirect_url } = await req.json();
+  const { email, pseudo, role, statut_compte, essai_semaines, redirect_url, categorie_compte } = await req.json();
 
   if (!email || !pseudo || !role) {
     return new Response(JSON.stringify({ error: 'Email, pseudo et rôle requis' }), { status: 400 });
@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
     statut_compte: statut_compte || 'actif',
     essai_fin: essaiFin,
     cree_par: caller.user.id,
+    categorie_compte: role === 'etudiant' ? (categorie_compte || null) : null,
   });
 
   if (profileError) {

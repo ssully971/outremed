@@ -45,10 +45,13 @@ export default function Planning() {
   async function chargerTout() {
     const { data: session } = await supabase.auth.getSession();
     if (!session.session) { navigate('/'); return; }
-    const { data: moi } = await supabase.from('profiles').select('role').eq('id', session.session.user.id).single();
+    const { data: moi } = await supabase.from('profiles').select('role, categorie_compte').eq('id', session.session.user.id).single();
     if (moi?.role !== 'proprietaire') {
-      const { data: paramP } = await supabase.from('parametres').select('valeur').eq('cle', 'planning_actif').single();
-      if (paramP?.valeur === 'false') { navigate('/accueil'); return; }
+      const { data: params } = await supabase.from('parametres').select('cle, valeur').in('cle', ['planning_actif', 'mode_site']);
+      const map = {}; (params || []).forEach((p) => { map[p.cle] = p.valeur; });
+      const estEtudiantAnnale = moi?.role === 'etudiant' && moi?.categorie_compte === 'annale';
+      const estTuteurRestreint = moi?.role === 'tuteur' && map.mode_site === 'annale';
+      if (map.planning_actif === 'false' || estEtudiantAnnale || estTuteurRestreint) { navigate('/accueil'); return; }
     }
     setMonProfil(moi);
 

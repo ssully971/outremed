@@ -24,6 +24,11 @@ export default function MesStats() {
     const uid = session.session.user.id;
 
     const { data: p } = await supabase.from('profiles').select('*').eq('id', uid).single();
+    if (p?.role !== 'proprietaire') {
+      const { data: param } = await supabase.from('parametres').select('valeur').eq('cle', 'mes_stats_actif').single();
+      const estEtudiantAnnale = p?.role === 'etudiant' && p?.categorie_compte === 'annale';
+      if (param?.valeur === 'false' || estEtudiantAnnale) { navigate('/accueil'); return; }
+    }
     setProfil(p);
 
     const { data: mats } = await supabase.from('matieres').select('*');

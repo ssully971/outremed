@@ -207,6 +207,22 @@ export default function Accueil() {
   if (!profil) return <div style={{ padding: 40 }}>Chargement...</div>;
 
   const estAdmin = profil.role === 'tuteur' || profil.role === 'proprietaire';
+  const estEtudiantAnnale = profil.role === 'etudiant' && profil.categorie_compte === 'annale';
+
+  if (estEtudiantAnnale) {
+    return (
+      <div className="container" style={{ maxWidth: 560, textAlign: 'center', paddingTop: 80 }}>
+        <div className="hero-icon-wrap" style={{ marginBottom: 20 }}>
+          <span style={{ fontSize: '3rem' }}>🎓</span>
+        </div>
+        <h1 className="page-title">Salut {profil.pseudo} !</h1>
+        <p className="page-sub" style={{ marginBottom: 28 }}>Retrouve ici toutes les annales disponibles.</p>
+        <Link to="/qcm" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block', padding: '14px 32px' }}>
+          Voir les annales →
+        </Link>
+      </div>
+    );
+  }
 
   async function enregistrerCitation() {
     await supabase.from('parametres').update({ valeur: nouvelleCitation }).eq('cle', 'citation_accueil');

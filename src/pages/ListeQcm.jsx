@@ -12,6 +12,7 @@ export default function ListeQcm() {
   const [etendues, setEtendues] = useState({});
   const [semaineKholleActuelle, setSemaineKholleActuelle] = useState(null);
   const [qcmsKholleDetail, setQcmsKholleDetail] = useState([]);
+  const [estEtudiantAnnale, setEstEtudiantAnnale] = useState(false);
   const navigate = useNavigate();
 
   async function charger() {
@@ -19,8 +20,11 @@ export default function ListeQcm() {
     if (!session.session) { navigate('/'); return; }
     const uid = session.session.user.id;
 
-    const { data: moi } = await supabase.from('profiles').select('role').eq('id', uid).single();
+    const { data: moi } = await supabase.from('profiles').select('role, categorie_compte').eq('id', uid).single();
     setMonRole(moi?.role);
+    const annale = moi?.role === 'etudiant' && moi?.categorie_compte === 'annale';
+    setEstEtudiantAnnale(annale);
+    if (annale) setOngletActif('annale');
 
     const { data: mats } = await supabase.from('matieres').select('*').eq('est_prive', false).order('nom');
     const { data: listeQcms } = await supabase.from('qcms').select('*').eq('visible', true).eq('publie', true).eq('est_prive', false);
@@ -144,7 +148,7 @@ export default function ListeQcm() {
       <h1 className="page-title">QCM</h1>
       <p className="page-sub">Retrouve tous les QCM disponibles, par matière.</p>
 
-      {semaineKholleActuelle && (
+      {!estEtudiantAnnale && semaineKholleActuelle && (
         <div className="kholle-banner">
           <div className="kholle-top">
             <div>
@@ -166,13 +170,15 @@ export default function ListeQcm() {
         </div>
       )}
 
-      <div className="category-tabs">
-        {[['tous', 'Tous'], ['entrainement', 'Entraînement'], ['annale', 'Annales'], ['concours', 'Concours blancs']].map(([val, label]) => (
-          <button key={val} className={`cat-tab ${ongletActif === val ? 'active' : ''}`} onClick={() => setOngletActif(val)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {!estEtudiantAnnale && (
+        <div className="category-tabs">
+          {[['tous', 'Tous'], ['entrainement', 'Entraînement'], ['annale', 'Annales'], ['concours', 'Concours blancs']].map(([val, label]) => (
+            <button key={val} className={`cat-tab ${ongletActif === val ? 'active' : ''}`} onClick={() => setOngletActif(val)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="search-bar">
         <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher un QCM..." />

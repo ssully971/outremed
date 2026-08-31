@@ -23,6 +23,9 @@ export default function Comptes() {
   const [rechercheEtudiant, setRechercheEtudiant] = useState('');
   const [filtreStatutEtudiant, setFiltreStatutEtudiant] = useState('tous');
   const [triEtudiant, setTriEtudiant] = useState('pseudo');
+  const [filtreCategorie, setFiltreCategorie] = useState('tous');
+  const [modeSite, setModeSite] = useState('normal');
+  const [categorieCompte, setCategorieCompte] = useState('');
 
   // Tuteurs
   const [tuteurs, setTuteurs] = useState([]);
@@ -40,7 +43,15 @@ export default function Comptes() {
     if (moi?.role !== 'tuteur' && moi?.role !== 'proprietaire') { navigate('/accueil'); return; }
     setMonProfil(moi);
 
-    const { data: etus } = await supabase.from('profiles').select('*').eq('role', 'etudiant').order('pseudo');
+    const { data: paramMode } = await supabase.from('parametres').select('valeur').eq('cle', 'mode_site').single();
+    const mode = paramMode?.valeur || 'normal';
+    setModeSite(mode);
+    const tuteurRestreint = moi?.role === 'tuteur' && mode === 'annale';
+    if (tuteurRestreint) setCategorieCompte('annale');
+
+    let requeteEtudiants = supabase.from('profiles').select('*').eq('role', 'etudiant').order('pseudo');
+    if (tuteurRestreint) requeteEtudiants = requeteEtudiants.eq('categorie_compte', 'annale');
+    const { data: etus } = await requeteEtudiants;
     setEtudiants(etus || []);
 
     const { data: att } = await supabase.from('attempts').select('user_id, score, qcms(nb_questions)');
@@ -87,7 +98,7 @@ export default function Comptes() {
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-      body: JSON.stringify({ email, pseudo, role, statut_compte: statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin }),
+      body: JSON.stringify({ email, pseudo, role, statut_compte: categorieCompte === 'annale' ? 'actif' : statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin, categorie_compte: role === 'etudiant' ? (categorieCompte || null) : null }),
     });
 
     const result = await res.json();
@@ -173,6 +184,11 @@ export default function Comptes() {
   const etudiantsAffiches = etudiants
     .filter((e) => e.pseudo.toLowerCase().includes(rechercheEtudiant.toLowerCase()))
     .filter((e) => {
+      if (filtreCategorie === 'normaux') return !e.categorie_compte;
+      if (filtreCategorie === 'annales') return e.categorie_compte === 'annale';
+      return true;
+    })
+    .filter((e) => {
       if (filtreStatutEtudiant === 'tous') return true;
       if (filtreStatutEtudiant === 'suspendu') return !e.compte_actif || e.statut_compte === 'suspendu';
       return e.statut_compte === filtreStatutEtudiant && e.compte_actif;
@@ -208,6 +224,10 @@ export default function Comptes() {
         <div className="stat-box"><div className="stat-value" style={{ color: 'var(--error)' }}>{etudiants.filter((e) => !e.compte_actif || e.statut_compte === 'suspendu').length}</div><div className="stat-label">Désactivés/suspendus</div></div>
       </div>
 
+      {modeSite === 'annale' && monProfil.role === 'tuteur' && (
+        <div className="info-box">🎓 Le site est en <b>mode Annale</b> — tu gères ici uniquement les comptes étudiant-annale.</div>
+      )}
+
       <div className="category-tabs">
         <button className={`cat-tab ${onglet === 'etudiants' ? 'active' : ''}`} onClick={() => setOnglet('etudiants')}>Étudiants</button>
         {monProfil.role === 'proprietaire' && (
@@ -228,6 +248,13 @@ export default function Comptes() {
             ].map(([val, label]) => (
               <button key={val} className={`filter-chip ${filtreStatutEtudiant === val ? 'active' : ''}`} onClick={() => setFiltreStatutEtudiant(val)}>{label}</button>
             ))}
+            {monProfil.role === 'proprietaire' && [
+              ['tous', 'Toutes catégories'],
+              ['normaux', 'Normaux'],
+              ['annales', 'Annales'],
+            ].map(([val, label]) => (
+              <button key={val} className={`filter-chip ${filtreCategorie === val ? 'active' : ''}`} onClick={() => setFiltreCategorie(val)}>{label}</button>
+            ))}
             <select className="select-filter" value={triEtudiant} onChange={(e) => setTriEtudiant(e.target.value)} style={{ marginLeft: 'auto' }}>
               <option value="pseudo">Trier par pseudo (A-Z)</option>
               <option value="recent">Trier par plus récent</option>
@@ -247,7 +274,7 @@ export default function Comptes() {
               return (
                 <Link key={e.id} to={`/etudiants/${e.id}`} className="student-row">
                   <div className="sr-avatar">{e.pseudo.slice(0, 2).toUpperCase()}</div>
-                  <div className="sr-name">{e.pseudo}</div>
+                  <div className="sr-name">{e.pseudo}{e.categorie_compte === 'annale' && <span className="status-tag status-pending" style={{ marginLeft: 8, fontSize: '0.65rem' }}>annale</span>}</div>
                   <div className="sr-avg" style={{ color: moyennePct !== null ? 'var(--accent)' : 'var(--text-muted)' }}>{moyennePct !== null ? `${moyennePct}%` : '—'}</div>
                   <div className="sr-qcm">{m?.count ?? 0} QCM</div>
                   <div className="sr-trial">
@@ -331,7 +358,11 @@ export default function Comptes() {
               <h3>Ajouter un compte</h3>
               <button type="button" onClick={() => setAjoutOuvert(false)} style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
             </div>
-            <p className="modal-sub">Un lien d'invitation sera envoyé par e-mail pour définir le mot de passe.</p>
+            <p className="modal-sub">
+              {categorieCompte === 'annale' && monProfil.role === 'tuteur'
+                ? "Un lien d'invitation sera envoyé — le compte sera un étudiant annale."
+                : "Un lien d'invitation sera envoyé par e-mail pour définir le mot de passe."}
+            </p>
 
             <div className="field">
               <label>Email</label>
@@ -341,14 +372,25 @@ export default function Comptes() {
               <label>Pseudo</label>
               <input value={pseudo} onChange={(e) => setPseudo(e.target.value)} required />
             </div>
-            <div className="field">
-              <label>Type de compte</label>
-              <select value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="etudiant">Étudiant</option>
-                {monProfil.role === 'proprietaire' && <option value="tuteur">Tuteur</option>}
-              </select>
-            </div>
-            {role === 'etudiant' && (
+            {!(monProfil.role === 'tuteur' && modeSite === 'annale') && (
+              <div className="field">
+                <label>Type de compte</label>
+                <select value={role} onChange={(e) => setRole(e.target.value)}>
+                  <option value="etudiant">Étudiant</option>
+                  {monProfil.role === 'proprietaire' && <option value="tuteur">Tuteur</option>}
+                </select>
+              </div>
+            )}
+            {role === 'etudiant' && monProfil.role === 'proprietaire' && (
+              <div className="field">
+                <label>Catégorie</label>
+                <select value={categorieCompte} onChange={(e) => setCategorieCompte(e.target.value)}>
+                  <option value="">Normal</option>
+                  <option value="annale">Annale</option>
+                </select>
+              </div>
+            )}
+            {role === 'etudiant' && categorieCompte !== 'annale' && (
               <>
                 <div className="field">
                   <label>Statut</label>

@@ -19,8 +19,13 @@ export default function CarnetErreurs() {
     if (!session.session) { navigate('/'); return; }
     const uid = session.session.user.id;
 
-    const { data: moi } = await supabase.from('profiles').select('role').eq('id', uid).single();
+    const { data: moi } = await supabase.from('profiles').select('role, categorie_compte').eq('id', uid).single();
     setMonRole(moi?.role);
+    if (moi?.role !== 'proprietaire') {
+      const { data: param } = await supabase.from('parametres').select('valeur').eq('cle', 'carnet_erreurs_actif').single();
+      const estEtudiantAnnale = moi?.role === 'etudiant' && moi?.categorie_compte === 'annale';
+      if (param?.valeur === 'false' || estEtudiantAnnale) { navigate('/accueil'); return; }
+    }
 
     const { data: mats } = await supabase.from('matieres').select('*');
     setMatieres(mats || []);

@@ -149,6 +149,16 @@ export default function Profil() {
     setParams((prev) => ({ ...prev, [cle]: valeur }));
   }
 
+  async function changerModeSite(nouveauMode) {
+    if (params.mode_site === 'annale' && nouveauMode === 'normal') {
+      if (!confirm("Repasser en mode normal va désactiver tous les comptes étudiant-annale, pour laisser la place aux comptes étudiants normaux. Tu pourras les réactiver manuellement plus tard si besoin. Continuer ?")) return;
+      await supabase.from('profiles').update({ compte_actif: false }).eq('categorie_compte', 'annale');
+    }
+    await supabase.from('parametres').update({ valeur: nouveauMode }).eq('cle', 'mode_site');
+    majParam('mode_site', nouveauMode);
+    setMessageParams(nouveauMode === 'annale' ? 'Mode Annale activé.' : 'Mode Normal réactivé — les comptes étudiant-annale ont été désactivés.');
+  }
+
   async function enregistrerParametres() {
     setMessageParams('');
     for (const [cle, valeur] of Object.entries(params)) {
@@ -332,6 +342,21 @@ export default function Profil() {
           </div>
 
           <div className="settings-card">
+            <h3>Mode du site 🎓</h3>
+            <p className="desc">
+              Le mode Annale restreint le site aux QCM d'annales : les tuteurs ne gèrent que les comptes étudiant-annale et les QCM,
+              les étudiants annale ne voient que les QCM. Le reste du site (Forum, Planning, Classement...) reste réservé à toi seul pendant ce temps.
+            </p>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Mode actuel</label>
+              <select value={params.mode_site || 'normal'} onChange={(e) => changerModeSite(e.target.value)}>
+                <option value="normal">Normal</option>
+                <option value="annale">Annale</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="settings-card">
             <h3>Fonctionnement du site</h3>
             <div className="toggle-row">
               <span className="toggle-label">Essai gratuit activé</span>
@@ -351,6 +376,27 @@ export default function Profil() {
               <span className="toggle-label">Planning activé</span>
               <label className="switch">
                 <input type="checkbox" checked={params.planning_actif === 'true'} onChange={(e) => majParam('planning_actif', e.target.checked ? 'true' : 'false')} />
+                <span className="slider" />
+              </label>
+            </div>
+            <div className="toggle-row">
+              <span className="toggle-label">Classement activé</span>
+              <label className="switch">
+                <input type="checkbox" checked={params.classement_actif === 'true'} onChange={(e) => majParam('classement_actif', e.target.checked ? 'true' : 'false')} />
+                <span className="slider" />
+              </label>
+            </div>
+            <div className="toggle-row">
+              <span className="toggle-label">Carnet d'erreurs activé</span>
+              <label className="switch">
+                <input type="checkbox" checked={params.carnet_erreurs_actif === 'true'} onChange={(e) => majParam('carnet_erreurs_actif', e.target.checked ? 'true' : 'false')} />
+                <span className="slider" />
+              </label>
+            </div>
+            <div className="toggle-row">
+              <span className="toggle-label">Mes stats activé</span>
+              <label className="switch">
+                <input type="checkbox" checked={params.mes_stats_actif === 'true'} onChange={(e) => majParam('mes_stats_actif', e.target.checked ? 'true' : 'false')} />
                 <span className="slider" />
               </label>
             </div>

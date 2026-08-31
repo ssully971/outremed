@@ -34,6 +34,13 @@ export default function Classement() {
       const { data: session } = await supabase.auth.getSession();
       if (!session.session) { navigate('/'); return; }
       const { data: moi } = await supabase.from('profiles').select('*').eq('id', session.session.user.id).single();
+      if (moi?.role !== 'proprietaire') {
+        const { data: params } = await supabase.from('parametres').select('cle, valeur').in('cle', ['classement_actif', 'mode_site']);
+        const map = {}; (params || []).forEach((p) => { map[p.cle] = p.valeur; });
+        const estEtudiantAnnale = moi?.role === 'etudiant' && moi?.categorie_compte === 'annale';
+        const estTuteurRestreint = moi?.role === 'tuteur' && map.mode_site === 'annale';
+        if (map.classement_actif === 'false' || estEtudiantAnnale || estTuteurRestreint) { navigate('/accueil'); return; }
+      }
       setMonProfil(moi);
 
       const { data: mats } = await supabase.from('matieres').select('*');
