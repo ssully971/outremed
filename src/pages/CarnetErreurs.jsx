@@ -89,8 +89,8 @@ export default function CarnetErreurs() {
     Object.entries(groupes).forEach(([matiereId, coursObj]) => {
       const nomMatiere = matieres.find((m) => m.id === matiereId)?.nom || 'Autre';
       texte += `--- ${nomMatiere} ---\n\n`;
-      Object.entries(coursObj).forEach(([coursId, qcmsObj]) => {
-        Object.entries(qcmsObj).forEach(([qcmId, data]) => {
+      Object.entries(coursObj).forEach(([, qcmsObj]) => {
+        Object.entries(qcmsObj).forEach(([, data]) => {
           texte += `${data.titre}\n`;
           data.questions.forEach((q) => { texte += `  Q${q.ordre} (${q.statut}) : ${q.enonce}\n`; });
           texte += '\n';

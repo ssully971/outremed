@@ -40,7 +40,6 @@ export default function Statistiques() {
       setProfils(pmap);
       setEtudiants((profs || []).filter((p) => p.role === 'etudiant'));
 
-      const { data: att } = await supabase.from('resultats_classement').select('*');
       const { data: attGeneral } = await supabase.from('attempts').select('id, score, user_id, qcm_id, created_at, temps_passe_secondes');
       setToutesAttempts(attGeneral || []);
 

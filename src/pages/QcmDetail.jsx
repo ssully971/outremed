@@ -257,7 +257,7 @@ export default function QcmDetail() {
       setFinalScore(result.score);
       construireCorrection();
       setFinished(true);
-    } catch (err) {
+    } catch {
       setErreur("Impossible de contacter le serveur pour enregistrer ta tentative. Vérifie ta connexion et réessaie.");
     }
   }
@@ -429,7 +429,7 @@ export default function QcmDetail() {
         </div>
 
         <div className="review-list">
-          {nbFiltre.map((d, i) => {
+          {nbFiltre.map((d) => {
             const indexReel = detailCorrection.indexOf(d);
             const estOuvert = carteOuverte === indexReel;
             return (

@@ -152,7 +152,7 @@ export default function Accueil() {
                 meilleure = { qcmId, titre: qcmInfo.titre, dernierModif: donnees.dernierModif || 0, matiereId: qcmInfo.matiere_id };
               }
             }
-          } catch (err) { /* entrée corrompue, on ignore */ }
+          } catch { /* entrée corrompue, on ignore */ }
         }
         if (meilleure) {
           const infoMat = matieresMap[meilleure.matiereId] || {};

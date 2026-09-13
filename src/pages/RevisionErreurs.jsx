@@ -30,7 +30,7 @@ export default function RevisionErreurs() {
         });
         const result = await res.json().catch(() => ({}));
         setQuestions(result.questions || []);
-      } catch (err) {
+      } catch {
         setQuestions([]);
       }
     }

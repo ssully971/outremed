@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { envoyerNotificationGroupe } from '../lib/notifier';
+import ImportJsonQcm from '../components/ImportJsonQcm';
+import CreerMatiereCoursModal from '../components/CreerMatiereCoursModal';
 
 const ITEM_VIDE = () => ({ texte: '', est_correct: false, correction: '' });
 const QUESTION_VIDE = (nbItems) => ({ enonce: '', items: Array.from({ length: nbItems }, ITEM_VIDE) });
@@ -21,7 +23,6 @@ export default function CreationQcm() {
   const [matieres, setMatieres] = useState([]);
   const [cours, setCours] = useState([]);
   const [navOuverte, setNavOuverte] = useState(false);
-  const [questionActive, setQuestionActive] = useState(0);
 
   const [titre, setTitre] = useState('');
   const [matiereId, setMatiereId] = useState('');
@@ -39,6 +40,17 @@ export default function CreationQcm() {
   const [message, setMessage] = useState('');
   const [enCours, setEnCours] = useState(false);
 
+  const [modeCreation, setModeCreation] = useState('manuel');
+  const [modalMatiereOuvert, setModalMatiereOuvert] = useState(false);
+  const [modalCoursOuvert, setModalCoursOuvert] = useState(false);
+
+  async function chargerMatieresEtCours() {
+    const { data: mats } = await supabase.from('matieres').select('*').eq('est_prive', false).order('nom');
+    const { data: crs } = await supabase.from('cours').select('*').eq('est_prive', false).order('nom');
+    setMatieres(mats || []);
+    setCours(crs || []);
+  }
+
   useEffect(() => {
     async function charger() {
       const { data: session } = await supabase.auth.getSession();
@@ -46,10 +58,7 @@ export default function CreationQcm() {
       const { data: moi } = await supabase.from('profiles').select('role').eq('id', session.session.user.id).single();
       if (moi?.role !== 'tuteur' && moi?.role !== 'proprietaire') { navigate('/accueil'); return; }
 
-      const { data: mats } = await supabase.from('matieres').select('*').eq('est_prive', false).order('nom');
-      const { data: crs } = await supabase.from('cours').select('*').eq('est_prive', false).order('nom');
-      setMatieres(mats || []);
-      setCours(crs || []);
+      await chargerMatieresEtCours();
 
       const { data: paramQ } = await supabase.from('parametres').select('valeur').eq('cle', 'nb_questions_defaut').single();
       const { data: paramI } = await supabase.from('parametres').select('valeur').eq('cle', 'nb_items_defaut').single();
@@ -114,6 +123,21 @@ export default function CreationQcm() {
     return questions
       .map((q, idx) => ({ idx, incomplete: !q.enonce.trim() || !q.items.some((it) => it.est_correct) }))
       .filter((q) => q.incomplete);
+  }
+
+  function gererImportJson({ titre: titreImporte, matiereId: matiereIdImportee, coursId: coursIdImporte, typeGeneral: typeImporte, coursAnnaleIds: coursAnnaleIdsImportes, questions: questionsImportees, avertissements }) {
+    setTitre(titreImporte);
+    setMatiereId(matiereIdImportee);
+    setCoursId(coursIdImporte);
+    setTypeGeneral(typeImporte);
+    setCoursAnnaleIds(coursAnnaleIdsImportes);
+    setNbQuestions(questionsImportees.length);
+    setNbItems(Math.max(...questionsImportees.map((q) => q.items.length)));
+    setQuestions(questionsImportees);
+    setModeCreation('manuel');
+
+    const base = `✅ ${questionsImportees.length} question(s) importée(s) depuis le JSON.`;
+    setMessage(avertissements.length > 0 ? `${base} ⚠️ ${avertissements.join(' ')}` : base);
   }
 
   async function publier() {
@@ -204,8 +228,23 @@ export default function CreationQcm() {
       <div className="container" style={{ maxWidth: 640 }}>
         <Link to="/qcm/gerer" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textDecoration: 'none' }}>← Retour à Gérer les QCM</Link>
         <h1 className="page-title" style={{ marginTop: 12 }}>Créer un QCM</h1>
-        <p className="page-sub" style={{ marginBottom: 24 }}>Étape 1 sur 2 — configuration générale</p>
+        <p className="page-sub" style={{ marginBottom: 24 }}>Étape 1 sur 3 — configuration générale</p>
 
+        <div className="mode-selector" style={{ margin: '0 0 28px' }}>
+          <div className={`mode-card ${modeCreation === 'manuel' ? 'selected' : ''}`} onClick={() => setModeCreation('manuel')}>
+            <div className="mode-title">✍️ Création manuelle</div>
+            <div className="mode-desc">Rédige le QCM question par question directement sur le site.</div>
+          </div>
+          <div className={`mode-card ${modeCreation === 'json' ? 'selected' : ''}`} onClick={() => setModeCreation('json')}>
+            <div className="mode-title">📥 Import JSON</div>
+            <div className="mode-desc">Colle un QCM généré par une IA (ChatGPT, Claude...) à partir d'un prompt-type.</div>
+          </div>
+        </div>
+
+        {modeCreation === 'json' ? (
+          <ImportJsonQcm matieres={matieres} cours={cours} onImporte={gererImportJson} />
+        ) : (
+          <>
         <div className="field">
           <label>Type de QCM</label>
           <div className="type-grid">
@@ -230,7 +269,10 @@ export default function CreationQcm() {
           </div>
 
           <div className="field">
-            <label>Matière</label>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              Matière
+              <button type="button" className="btn btn-ghost" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => setModalMatiereOuvert(true)}>+ Nouvelle matière</button>
+            </label>
             <select value={matiereId} onChange={(e) => { setMatiereId(e.target.value); setCoursId(''); }}>
               <option value="">— choisir —</option>
               {matieres.filter((m) => m.actif !== false).map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
@@ -239,7 +281,10 @@ export default function CreationQcm() {
 
           {typeGeneral !== 'annale' && matiereId && (
             <div className="field">
-              <label>Cours (optionnel)</label>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                Cours (optionnel)
+                <button type="button" className="btn btn-ghost" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => setModalCoursOuvert(true)}>+ Nouveau cours</button>
+              </label>
               <select value={coursId} onChange={(e) => setCoursId(e.target.value)}>
                 <option value="">— aucun —</option>
                 {cours.filter((c) => c.matiere_id === matiereId).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
@@ -247,9 +292,12 @@ export default function CreationQcm() {
             </div>
           )}
 
-          {typeGeneral === 'annale' && (
+          {typeGeneral === 'annale' && matiereId && (
             <div className="field">
-              <label>Cours concernés (plusieurs possibles)</label>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                Cours concernés (plusieurs possibles)
+                <button type="button" className="btn btn-ghost" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => setModalCoursOuvert(true)}>+ Nouveau cours</button>
+              </label>
               <select multiple value={coursAnnaleIds} onChange={(e) => setCoursAnnaleIds([...e.target.selectedOptions].map((o) => o.value))} style={{ minHeight: 100 }}>
                 {cours.filter((c) => c.matiere_id === matiereId).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
               </select>
@@ -298,10 +346,34 @@ export default function CreationQcm() {
             {!publierMaintenant && <p className="field-hint">Le QCM sera enregistré en brouillon — invisible des étudiants tant que tu ne le publies pas depuis "Gérer les QCM".</p>}
           </div>
 
-          {message && <div className="error-msg">{message}</div>}
+          {message && <div className="error-msg" style={{ color: message.startsWith('✅') ? 'var(--success)' : 'var(--error)' }}>{message}</div>}
 
           <button className="btn btn-primary" style={{ width: '100%' }} onClick={passerAuxQuestions}>Suivant : saisir les questions →</button>
         </div>
+        </>
+        )}
+
+        {modalMatiereOuvert && (
+          <CreerMatiereCoursModal
+            mode="matiere"
+            onFermer={() => setModalMatiereOuvert(false)}
+            onCree={async (nouvelle) => { await chargerMatieresEtCours(); setMatiereId(nouvelle.id); setCoursId(''); setModalMatiereOuvert(false); }}
+          />
+        )}
+
+        {modalCoursOuvert && (
+          <CreerMatiereCoursModal
+            mode="cours"
+            matiereId={matiereId}
+            onFermer={() => setModalCoursOuvert(false)}
+            onCree={async (nouveau) => {
+              await chargerMatieresEtCours();
+              if (typeGeneral === 'annale') setCoursAnnaleIds((prev) => [...prev, nouveau.id]);
+              else setCoursId(nouveau.id);
+              setModalCoursOuvert(false);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -333,7 +405,7 @@ export default function CreationQcm() {
               <b>{incompletes.length} question(s) semblent incomplètes</b> (énoncé vide ou aucune bonne réponse cochée) :
               <ul>
                 {incompletes.map((q) => (
-                  <li key={q.idx} onClick={() => { setEtape(2); setQuestionActive(q.idx); document.getElementById(`question-${q.idx}`)?.scrollIntoView({ behavior: 'smooth' }); }}>
+                  <li key={q.idx} onClick={() => { setEtape(2); document.getElementById(`question-${q.idx}`)?.scrollIntoView({ behavior: 'smooth' }); }}>
                     Question {q.idx + 1} →
                   </li>
                 ))}

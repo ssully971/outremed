@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabaseClient';
 
 export default function FicheTuteur() {
   const { id } = useParams();
-  const [monRole, setMonRole] = useState(null);
   const [tuteur, setTuteur] = useState(null);
   const [qcmsAjoutes, setQcmsAjoutes] = useState([]);
   const [validationsCeMois, setValidationsCeMois] = useState(0);
@@ -16,7 +15,6 @@ export default function FicheTuteur() {
     if (!session.session) { navigate('/'); return; }
     const { data: moi } = await supabase.from('profiles').select('role').eq('id', session.session.user.id).single();
     if (moi?.role !== 'proprietaire') { navigate('/accueil'); return; }
-    setMonRole(moi.role);
 
     const { data: t } = await supabase.from('profiles').select('*').eq('id', id).single();
     setTuteur(t);

@@ -7,7 +7,6 @@ export default function FicheEtudiant() {
   const { id } = useParams();
   const [etudiant, setEtudiant] = useState(null);
   const [attempts, setAttempts] = useState([]);
-  const [monRole, setMonRole] = useState(null);
   const [confirmationSuppression, setConfirmationSuppression] = useState('');
   const [suppressionEnCours, setSuppressionEnCours] = useState(false);
   const [zoneSuppressionOuverte, setZoneSuppressionOuverte] = useState(false);
@@ -31,7 +30,6 @@ export default function FicheEtudiant() {
 
     const { data: moi } = await supabase.from('profiles').select('role').eq('id', session.session.user.id).single();
     if (moi?.role !== 'tuteur' && moi?.role !== 'proprietaire') { navigate('/accueil'); return; }
-    setMonRole(moi?.role);
 
     const { data: e } = await supabase.from('profiles').select('*').eq('id', id).single();
     setEtudiant(e);
@@ -149,7 +147,7 @@ export default function FicheEtudiant() {
         body: JSON.stringify({ user_id: id }),
       });
       result = await res.json().catch(() => ({}));
-    } catch (err) {
+    } catch {
       setSuppressionEnCours(false);
       alert("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
       return;

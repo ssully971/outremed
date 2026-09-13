@@ -103,7 +103,7 @@ export default function Comptes() {
         body: JSON.stringify({ email, pseudo, role, statut_compte: categorieCompte === 'annale' ? 'actif' : statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin, categorie_compte: role === 'etudiant' ? (categorieCompte || null) : null }),
       });
       result = await res.json().catch(() => ({}));
-    } catch (err) {
+    } catch {
       setEnCours(false);
       setMessage("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
       return;
@@ -181,7 +181,7 @@ export default function Comptes() {
         body: JSON.stringify({ user_id: tuteur.id }),
       });
       result = await res.json().catch(() => ({}));
-    } catch (err) {
+    } catch {
       setSuppressionEnCours(false);
       alert("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
       return;

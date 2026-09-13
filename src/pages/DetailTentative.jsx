@@ -22,7 +22,7 @@ export default function DetailTentative() {
         const result = await res.json().catch(() => ({}));
         if (!res.ok) { setErreur(result.error || "Une erreur est survenue lors du chargement."); return; }
         setDonnees(result);
-      } catch (err) {
+      } catch {
         setErreur("Impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
       }
     }
