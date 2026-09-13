@@ -11,10 +11,14 @@ const LETTRES = 'ABCDEFGH';
 
 const TYPES_QCM = [
   { val: 'entrainement', icon: '📘', titre: 'Entraînement', desc: 'Correction affichée après chaque question. Nombre de questions modifiable.' },
-  { val: 'kholle', icon: '🔥', titre: 'Kholle hebdomadaire', desc: "Visible seulement le week-end, redevient un entraînement le lundi. Toujours 20 questions." },
+  { val: 'kholle', icon: '🔥', titre: 'Kholle hebdomadaire', desc: "Visible uniquement pendant le créneau choisi, redevient un entraînement une fois terminée. Toujours 20 questions." },
   { val: 'annale', icon: '📄', titre: 'Annale', desc: "L'étudiant choisit lui-même entraînement ou concours. Nombre de questions modifiable." },
   { val: 'concours_blanc', icon: '🏆', titre: 'Concours blanc', desc: 'Minuté, correction à la fin, une seule tentative. Toujours 20 questions.' },
 ];
+
+function formatDateHeure(iso) {
+  return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 export default function CreationQcm() {
   const navigate = useNavigate();
@@ -34,13 +38,17 @@ export default function CreationQcm() {
   const [nbItems, setNbItems] = useState(5);
   const [semestre, setSemestre] = useState('');
   const [publierMaintenant, setPublierMaintenant] = useState(true);
-  const [samediKholle, setSamediKholle] = useState('');
+
+  const [creneauxKholleDisponibles, setCreneauxKholleDisponibles] = useState([]);
+  const [creneauKholleChoisi, setCreneauKholleChoisi] = useState('');
+  const [kholleDebutInput, setKholleDebutInput] = useState('');
+  const [kholleFinInput, setKholleFinInput] = useState('');
 
   const [questions, setQuestions] = useState(Array.from({ length: 20 }, () => QUESTION_VIDE(5)));
   const [message, setMessage] = useState('');
   const [enCours, setEnCours] = useState(false);
 
-  const [modeCreation, setModeCreation] = useState('manuel');
+  const [modeQuestions, setModeQuestions] = useState('manuel');
   const [modalMatiereOuvert, setModalMatiereOuvert] = useState(false);
   const [modalCoursOuvert, setModalCoursOuvert] = useState(false);
 
@@ -51,6 +59,11 @@ export default function CreationQcm() {
     setCours(crs || []);
   }
 
+  async function chargerCreneauxKholle() {
+    const { data: creneaux } = await supabase.from('semaines_kholle').select('*').gte('fin', new Date().toISOString()).order('debut', { ascending: true }).limit(15);
+    setCreneauxKholleDisponibles(creneaux || []);
+  }
+
   useEffect(() => {
     async function charger() {
       const { data: session } = await supabase.auth.getSession();
@@ -59,6 +72,7 @@ export default function CreationQcm() {
       if (moi?.role !== 'tuteur' && moi?.role !== 'proprietaire') { navigate('/accueil'); return; }
 
       await chargerMatieresEtCours();
+      await chargerCreneauxKholle();
 
       const { data: paramQ } = await supabase.from('parametres').select('valeur').eq('cle', 'nb_questions_defaut').single();
       const { data: paramI } = await supabase.from('parametres').select('valeur').eq('cle', 'nb_items_defaut').single();
@@ -113,8 +127,10 @@ export default function CreationQcm() {
   function passerAuxQuestions() {
     setMessage('');
     if (!titre.trim() || !matiereId) { setMessage('Le nom du QCM et la matière sont obligatoires.'); return; }
-    if (typeGeneral === 'kholle' && !samediKholle) { setMessage('Choisis le samedi de la semaine de kholle.'); return; }
-    if (typeGeneral === 'kholle' && new Date(samediKholle + 'T00:00:00').getDay() !== 6) { setMessage('La date choisie doit être un samedi.'); return; }
+    if (typeGeneral === 'kholle' && !creneauKholleChoisi) {
+      if (!kholleDebutInput || !kholleFinInput) { setMessage('Choisis un créneau existant ou définis un début et une fin pour la kholle.'); return; }
+      if (new Date(kholleFinInput) <= new Date(kholleDebutInput)) { setMessage('La fin doit être après le début.'); return; }
+    }
     if (typeGeneral === 'annale' && coursAnnaleIds.length === 0) { setMessage('Sélectionne au moins un cours pour cette annale.'); return; }
     setEtape(2);
   }
@@ -125,16 +141,23 @@ export default function CreationQcm() {
       .filter((q) => q.incomplete);
   }
 
-  function gererImportJson({ titre: titreImporte, matiereId: matiereIdImportee, coursId: coursIdImporte, typeGeneral: typeImporte, coursAnnaleIds: coursAnnaleIdsImportes, questions: questionsImportees, avertissements }) {
-    setTitre(titreImporte);
-    setMatiereId(matiereIdImportee);
-    setCoursId(coursIdImporte);
-    setTypeGeneral(typeImporte);
-    setCoursAnnaleIds(coursAnnaleIdsImportes);
+  function descriptionCoursPourPrompt() {
+    if (typeGeneral === 'annale' && coursAnnaleIds.length > 0) {
+      return coursAnnaleIds.map((cid) => cours.find((c) => c.id === cid)?.nom).filter(Boolean).join(', ');
+    }
+    if (coursId) {
+      const c = cours.find((c) => c.id === coursId);
+      if (c) return c.nom;
+    }
+    const m = matieres.find((m) => m.id === matiereId);
+    return m ? `[décris ici le(s) cours de ${m.nom} que tu vas fournir]` : '[décris ici le(s) cours que tu vas fournir]';
+  }
+
+  function gererImportJson({ questions: questionsImportees, avertissements }) {
     setNbQuestions(questionsImportees.length);
     setNbItems(Math.max(...questionsImportees.map((q) => q.items.length)));
     setQuestions(questionsImportees);
-    setModeCreation('manuel');
+    setModeQuestions('manuel');
 
     const base = `✅ ${questionsImportees.length} question(s) importée(s) depuis le JSON.`;
     setMessage(avertissements.length > 0 ? `${base} ⚠️ ${avertissements.join(' ')}` : base);
@@ -160,29 +183,32 @@ export default function CreationQcm() {
     let kholleFinFinal = null;
 
     if (is_kholle) {
-      const { data: semaineExistante } = await supabase.from('semaines_kholle').select('*').eq('date_samedi', samediKholle).maybeSingle();
-
-      if (semaineExistante) {
-        semaineKholleId = semaineExistante.id;
-        kholleDebutFinal = semaineExistante.debut;
-        kholleFinFinal = semaineExistante.fin;
+      if (creneauKholleChoisi) {
+        const creneau = creneauxKholleDisponibles.find((c) => c.id === creneauKholleChoisi);
+        semaineKholleId = creneau.id;
+        kholleDebutFinal = creneau.debut;
+        kholleFinFinal = creneau.fin;
       } else {
-        const debutCalcule = new Date(samediKholle + 'T00:01:00');
-        const finCalculee = new Date(samediKholle + 'T00:00:00');
-        finCalculee.setDate(finCalculee.getDate() + 1);
-        finCalculee.setHours(23, 59, 0);
+        const dateChoisie = kholleDebutInput.slice(0, 10);
+        const { data: semaineExistante } = await supabase.from('semaines_kholle').select('*').eq('date_samedi', dateChoisie).maybeSingle();
 
-        const { data: parametre } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
+        if (semaineExistante) {
+          semaineKholleId = semaineExistante.id;
+          kholleDebutFinal = semaineExistante.debut;
+          kholleFinFinal = semaineExistante.fin;
+        } else {
+          const { data: parametre } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
 
-        const { data: nouvelleSemaine, error: erreurSemaine } = await supabase
-          .from('semaines_kholle')
-          .insert({ date_samedi: samediKholle, debut: debutCalcule.toISOString(), fin: finCalculee.toISOString(), semestre: parametre?.valeur || null, cree_par: userId })
-          .select().single();
+          const { data: nouvelleSemaine, error: erreurSemaine } = await supabase
+            .from('semaines_kholle')
+            .insert({ date_samedi: dateChoisie, debut: new Date(kholleDebutInput).toISOString(), fin: new Date(kholleFinInput).toISOString(), semestre: parametre?.valeur || null, cree_par: userId })
+            .select().single();
 
-        if (erreurSemaine) { setMessage('Erreur : ' + erreurSemaine.message); setEnCours(false); return; }
-        semaineKholleId = nouvelleSemaine.id;
-        kholleDebutFinal = nouvelleSemaine.debut;
-        kholleFinFinal = nouvelleSemaine.fin;
+          if (erreurSemaine) { setMessage('Erreur : ' + erreurSemaine.message); setEnCours(false); return; }
+          semaineKholleId = nouvelleSemaine.id;
+          kholleDebutFinal = nouvelleSemaine.debut;
+          kholleFinFinal = nouvelleSemaine.fin;
+        }
       }
     }
 
@@ -228,23 +254,8 @@ export default function CreationQcm() {
       <div className="container" style={{ maxWidth: 640 }}>
         <Link to="/qcm/gerer" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textDecoration: 'none' }}>← Retour à Gérer les QCM</Link>
         <h1 className="page-title" style={{ marginTop: 12 }}>Créer un QCM</h1>
-        <p className="page-sub" style={{ marginBottom: 24 }}>Étape 1 sur 3 — configuration générale</p>
+        <p className="page-sub">Étape 1 sur 3 — configuration générale</p>
 
-        <div className="mode-selector" style={{ margin: '0 0 28px' }}>
-          <div className={`mode-card ${modeCreation === 'manuel' ? 'selected' : ''}`} onClick={() => setModeCreation('manuel')}>
-            <div className="mode-title">✍️ Création manuelle</div>
-            <div className="mode-desc">Rédige le QCM question par question directement sur le site.</div>
-          </div>
-          <div className={`mode-card ${modeCreation === 'json' ? 'selected' : ''}`} onClick={() => setModeCreation('json')}>
-            <div className="mode-title">📥 Import JSON</div>
-            <div className="mode-desc">Colle un QCM généré par une IA (ChatGPT, Claude...) à partir d'un prompt-type.</div>
-          </div>
-        </div>
-
-        {modeCreation === 'json' ? (
-          <ImportJsonQcm matieres={matieres} cours={cours} onImporte={gererImportJson} />
-        ) : (
-          <>
         <div className="field">
           <label>Type de QCM</label>
           <div className="type-grid">
@@ -307,10 +318,47 @@ export default function CreationQcm() {
 
           {typeGeneral === 'kholle' && (
             <div className="kholle-note">
-              <div>
-                <label style={{ display: 'block', marginBottom: 8 }}>Semaine de kholle (choisis le samedi)</label>
-                <input type="date" value={samediKholle} onChange={(e) => setSamediKholle(e.target.value)} />
-                <p style={{ margin: '8px 0 0' }}>Visible automatiquement du samedi 00h01 au dimanche 23h59. Si une kholle existe déjà pour cette semaine, ce QCM la rejoint avec le même horaire.</p>
+              <div style={{ width: '100%' }}>
+                <label style={{ display: 'block', marginBottom: 8 }}>Créneau de kholle</label>
+
+                {creneauxKholleDisponibles.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <p className="field-hint" style={{ marginTop: 0, marginBottom: 8 }}>Créneaux déjà programmés — clique pour rejoindre :</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {creneauxKholleDisponibles.map((c) => (
+                        <div
+                          key={c.id}
+                          className={`filter-chip ${creneauKholleChoisi === c.id ? 'active' : ''}`}
+                          style={{ textAlign: 'left', cursor: 'pointer' }}
+                          onClick={() => setCreneauKholleChoisi(creneauKholleChoisi === c.id ? '' : c.id)}
+                        >
+                          Du {formatDateHeure(c.debut)} au {formatDateHeure(c.fin)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!creneauKholleChoisi && (
+                  <>
+                    <p className="field-hint" style={{ marginTop: 0 }}>Ou définis un nouvel horaire :</p>
+                    <div className="field-row">
+                      <div className="field">
+                        <label>Début</label>
+                        <input type="datetime-local" value={kholleDebutInput} onChange={(e) => setKholleDebutInput(e.target.value)} />
+                      </div>
+                      <div className="field">
+                        <label>Fin</label>
+                        <input type="datetime-local" value={kholleFinInput} onChange={(e) => setKholleFinInput(e.target.value)} />
+                      </div>
+                    </div>
+                  </>
+                )}
+                <p style={{ margin: '8px 0 0' }}>
+                  {creneauKholleChoisi
+                    ? 'Ce QCM rejoindra ce créneau existant.'
+                    : "Si une kholle existe déjà pour cette date, ce QCM la rejoindra automatiquement avec son horaire."}
+                </p>
               </div>
             </div>
           )}
@@ -346,12 +394,10 @@ export default function CreationQcm() {
             {!publierMaintenant && <p className="field-hint">Le QCM sera enregistré en brouillon — invisible des étudiants tant que tu ne le publies pas depuis "Gérer les QCM".</p>}
           </div>
 
-          {message && <div className="error-msg" style={{ color: message.startsWith('✅') ? 'var(--success)' : 'var(--error)' }}>{message}</div>}
+          {message && <div className="error-msg">{message}</div>}
 
           <button className="btn btn-primary" style={{ width: '100%' }} onClick={passerAuxQuestions}>Suivant : saisir les questions →</button>
         </div>
-        </>
-        )}
 
         {modalMatiereOuvert && (
           <CreerMatiereCoursModal
@@ -384,7 +430,7 @@ export default function CreationQcm() {
     return (
       <div className="container" style={{ maxWidth: 600 }}>
         <h1 className="page-title">Récapitulatif</h1>
-        <p className="page-sub" style={{ marginBottom: 24 }}>Vérifie tout avant de publier.</p>
+        <p className="page-sub">Vérifie tout avant de publier.</p>
 
         <div className="recap-summary">
           <div className="recap-stat"><div className="val">{questions.length}</div><div className="lbl">Questions</div></div>
@@ -432,61 +478,83 @@ export default function CreationQcm() {
   return (
     <div className="container" style={{ maxWidth: 700 }}>
       <h1 className="page-title">{titre}</h1>
-      <p className="page-sub" style={{ marginBottom: 20 }}>{questions.length} questions</p>
+      <p className="page-sub">Étape 2 sur 3 — {questions.length} questions</p>
 
-      <div className="nav-trigger-row">
-        <button className="nav-trigger-btn" onClick={() => setNavOuverte(true)}>🔢 Navigation entre questions</button>
-        <span className="mini-progress"><b>{nbRemplies}</b> / {questions.length} rédigées</span>
+      <div className="mode-selector" style={{ margin: '0 0 24px' }}>
+        <div className={`mode-card ${modeQuestions === 'manuel' ? 'selected' : ''}`} onClick={() => setModeQuestions('manuel')}>
+          <div className="mode-title">✍️ Saisie manuelle</div>
+          <div className="mode-desc">Rédige chaque question directement sur le site.</div>
+        </div>
+        <div className={`mode-card ${modeQuestions === 'json' ? 'selected' : ''}`} onClick={() => setModeQuestions('json')}>
+          <div className="mode-title">📥 Coller le JSON</div>
+          <div className="mode-desc">Importe le contenu généré par une IA à partir du prompt-type.</div>
+        </div>
       </div>
 
-      {questions.map((q, qIdx) => (
-        <div key={qIdx} id={`question-${qIdx}`} className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong>Question {qIdx + 1}</strong>
-            <button type="button" className="btn btn-ghost" style={{ padding: '3px 10px', fontSize: '0.75rem' }} onClick={() => setApercuOuvert(apercuOuvert === qIdx ? null : qIdx)}>
-              👁 {apercuOuvert === qIdx ? "Fermer l'aperçu" : 'Aperçu étudiant'}
-            </button>
+      {modeQuestions === 'json' ? (
+        <ImportJsonQcm
+          nbQuestionsAttendu={nbQuestions}
+          nbItemsAttendu={nbItems}
+          coursDescription={descriptionCoursPourPrompt()}
+          onImporte={gererImportJson}
+        />
+      ) : (
+        <>
+          <div className="nav-trigger-row">
+            <button className="nav-trigger-btn" onClick={() => setNavOuverte(true)}>🔢 Navigation entre questions</button>
+            <span className="mini-progress"><b>{nbRemplies}</b> / {questions.length} rédigées</span>
           </div>
-          <textarea
-            value={q.enonce}
-            onChange={(e) => majQuestion(qIdx, 'enonce', e.target.value)}
-            placeholder="Énoncé de la question"
-            style={{ width: '100%', minHeight: 60, marginTop: 8, marginBottom: 14 }}
-          />
 
-          {q.items.map((it, iIdx) => (
-            <div key={iIdx} className="item-editor">
-              <div className="item-editor-head">
-                <span className="item-letter-badge">{LETTRES[iIdx]}</span>
-                <input type="text" value={it.texte} onChange={(e) => majItem(qIdx, iIdx, 'texte', e.target.value)} placeholder={`Item ${LETTRES[iIdx]}`} />
-                <label className="truth-toggle">
-                  <input type="checkbox" checked={it.est_correct} onChange={(e) => majItem(qIdx, iIdx, 'est_correct', e.target.checked)} />
-                  <span>{it.est_correct ? 'Vrai' : 'Faux'}</span>
-                </label>
+          {questions.map((q, qIdx) => (
+            <div key={qIdx} id={`question-${qIdx}`} className="card" style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong>Question {qIdx + 1}</strong>
+                <button type="button" className="btn btn-ghost" style={{ padding: '3px 10px', fontSize: '0.75rem' }} onClick={() => setApercuOuvert(apercuOuvert === qIdx ? null : qIdx)}>
+                  👁 {apercuOuvert === qIdx ? "Fermer l'aperçu" : 'Aperçu étudiant'}
+                </button>
               </div>
-              <div className="explanation-input">
-                <span className="explanation-label">Explication (optionnel)</span>
-                <textarea value={it.correction} onChange={(e) => majItem(qIdx, iIdx, 'correction', e.target.value)} placeholder="Correction affichée à l'étudiant" />
-              </div>
-            </div>
-          ))}
+              <textarea
+                value={q.enonce}
+                onChange={(e) => majQuestion(qIdx, 'enonce', e.target.value)}
+                placeholder="Énoncé de la question"
+                style={{ width: '100%', minHeight: 60, marginTop: 8, marginBottom: 14 }}
+              />
 
-          {apercuOuvert === qIdx && (
-            <div style={{ marginTop: 14, padding: 16, background: 'var(--bg-panel)', borderRadius: 'var(--radius-md)' }}>
-              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase' }}>Ce que verra l'étudiant</p>
-              <h3 style={{ marginTop: 0 }}>{q.enonce || <em style={{ color: 'var(--text-muted)' }}>(énoncé vide)</em>}</h3>
               {q.items.map((it, iIdx) => (
-                <div key={iIdx} className="item">
-                  <span className="item-letter">{LETTRES[iIdx]}</span>
-                  <span>{it.texte || <em style={{ color: 'var(--text-muted)' }}>(item vide)</em>}</span>
+                <div key={iIdx} className="item-editor">
+                  <div className="item-editor-head">
+                    <span className="item-letter-badge">{LETTRES[iIdx]}</span>
+                    <input type="text" value={it.texte} onChange={(e) => majItem(qIdx, iIdx, 'texte', e.target.value)} placeholder={`Item ${LETTRES[iIdx]}`} />
+                    <label className="truth-toggle">
+                      <input type="checkbox" checked={it.est_correct} onChange={(e) => majItem(qIdx, iIdx, 'est_correct', e.target.checked)} />
+                      <span>{it.est_correct ? 'Vrai' : 'Faux'}</span>
+                    </label>
+                  </div>
+                  <div className="explanation-input">
+                    <span className="explanation-label">Explication (optionnel)</span>
+                    <textarea value={it.correction} onChange={(e) => majItem(qIdx, iIdx, 'correction', e.target.value)} placeholder="Correction affichée à l'étudiant" />
+                  </div>
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-      ))}
 
-      {message && <div className="error-msg">{message}</div>}
+              {apercuOuvert === qIdx && (
+                <div style={{ marginTop: 14, padding: 16, background: 'var(--bg-panel)', borderRadius: 'var(--radius-md)' }}>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase' }}>Ce que verra l'étudiant</p>
+                  <h3 style={{ marginTop: 0 }}>{q.enonce || <em style={{ color: 'var(--text-muted)' }}>(énoncé vide)</em>}</h3>
+                  {q.items.map((it, iIdx) => (
+                    <div key={iIdx} className="item">
+                      <span className="item-letter">{LETTRES[iIdx]}</span>
+                      <span>{it.texte || <em style={{ color: 'var(--text-muted)' }}>(item vide)</em>}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
+      {message && <div className="error-msg" style={{ color: message.startsWith('✅') ? 'var(--success)' : 'var(--error)' }}>{message}</div>}
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="btn btn-ghost" onClick={() => setEtape(1)}>← Retour</button>

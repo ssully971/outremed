@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { envoyerNotificationGroupe } from '../lib/notifier';
@@ -34,6 +34,8 @@ export default function QcmDetail() {
   const [debutSession] = useState(Date.now());
   const [navOuverte, setNavOuverte] = useState(false);
   const [flagged, setFlagged] = useState(new Set());
+  const [soumissionEnCours, setSoumissionEnCours] = useState(false);
+  const soumissionEnvoyeeRef = useRef(false);
   const [filtreCorrection, setFiltreCorrection] = useState('tous');
   const [detailCorrection, setDetailCorrection] = useState([]);
   const [carteOuverte, setCarteOuverte] = useState(null);
@@ -69,9 +71,7 @@ export default function QcmDetail() {
         setMeilleurScore(Math.max(...mesTentatives.map((t) => Number(t.score))));
       }
 
-      const jouerCommeEtudiant = qcmData.est_prive && qcmData.cree_par === uid;
-
-      if ((estAdmin && !jouerCommeEtudiant) || (aDejaTente && !qcmData.est_prive)) {
+      if (estAdmin || aDejaTente) {
         const { data: qs } = await supabase.from('questions').select('*').eq('qcm_id', id).order('ordre');
         const { data: its } = await supabase.from('items_visibles').select('*').in('question_id', (qs || []).map((q) => q.id));
         const questionsAvecItems = (qs || []).map((q) => ({ ...q, items: (its || []).filter((i) => i.question_id === q.id) }));
@@ -88,7 +88,7 @@ export default function QcmDetail() {
         return;
       }
 
-      if (qcmData.type_qcm === 'concours_blanc' && !qcmData.est_prive) {
+      if (qcmData.type_qcm === 'concours_blanc') {
         const { data: tentative } = await supabase
           .from('attempts').select('*').eq('qcm_id', id).eq('user_id', uid).limit(1);
         if (tentative && tentative.length > 0) {
@@ -208,6 +208,10 @@ export default function QcmDetail() {
   }
 
   async function finirEntrainement() {
+    if (soumissionEnvoyeeRef.current) return;
+    soumissionEnvoyeeRef.current = true;
+    setSoumissionEnCours(true);
+
     let score = 0;
     const detail = [];
     questions.forEach((q) => {
@@ -225,8 +229,16 @@ export default function QcmDetail() {
     });
 
     const tempsPasse = Math.floor((Date.now() - debutSession) / 1000);
-    const { data: attempt } = await supabase.from('attempts').insert({ qcm_id: id, user_id: userId, score, temps_passe_secondes: tempsPasse }).select().single();
-    if (attempt) await supabase.from('attempt_answers').insert(detail.map((d) => ({ attempt_id: attempt.id, ...d })));
+    const { data: attempt, error: erreurAttempt } = await supabase
+      .from('attempts').insert({ qcm_id: id, user_id: userId, score, temps_passe_secondes: tempsPasse }).select().single();
+
+    if (erreurAttempt || !attempt) {
+      setErreur("Impossible d'enregistrer ta tentative. Vérifie ta connexion et réessaie.");
+      soumissionEnvoyeeRef.current = false;
+      setSoumissionEnCours(false);
+      return;
+    }
+    await supabase.from('attempt_answers').insert(detail.map((d) => ({ attempt_id: attempt.id, ...d })));
 
     localStorage.removeItem(clePause);
     setFinalScore(score);
@@ -235,6 +247,10 @@ export default function QcmDetail() {
   }
 
   async function soumettreConcours() {
+    if (soumissionEnvoyeeRef.current) return;
+    soumissionEnvoyeeRef.current = true;
+    setSoumissionEnCours(true);
+
     const payload = questions.map((q) => ({ question_id: q.id, items_selectionnes: answers[q.id] || [] }));
     const { data: session } = await supabase.auth.getSession();
     const dureeSec = (qcm.duree_minutes || 30) * 60;
@@ -252,13 +268,20 @@ export default function QcmDetail() {
         result = {};
       }
 
-      if (!res.ok) { setErreur(result.error || "Une erreur est survenue lors de l'enregistrement. Réessaie, et si ça persiste, préviens ton tuteur."); return; }
+      if (!res.ok) {
+        setErreur(result.error || "Une erreur est survenue lors de l'enregistrement. Réessaie, et si ça persiste, préviens ton tuteur.");
+        soumissionEnvoyeeRef.current = false;
+        setSoumissionEnCours(false);
+        return;
+      }
       localStorage.removeItem(clePause);
       setFinalScore(result.score);
       construireCorrection();
       setFinished(true);
     } catch {
       setErreur("Impossible de contacter le serveur pour enregistrer ta tentative. Vérifie ta connexion et réessaie.");
+      soumissionEnvoyeeRef.current = false;
+      setSoumissionEnCours(false);
     }
   }
 
@@ -278,7 +301,7 @@ export default function QcmDetail() {
   }
 
   function quitterPause() {
-    navigate(qcm?.est_prive ? '/espace-perso' : '/qcm');
+    navigate('/qcm');
   }
 
   function basculerFlag() {
@@ -338,9 +361,7 @@ export default function QcmDetail() {
     if (!q) return <div className="container">Aucune question.</div>;
     return (
       <div className="container" style={{ maxWidth: 760 }}>
-        {qcm.est_prive
-          ? <Link to="/espace-perso" className="home-btn" style={{ marginBottom: 16, display: 'inline-flex' }}>← Espace perso</Link>
-          : <Link to="/qcm/gerer" className="home-btn" style={{ marginBottom: 16, display: 'inline-flex' }}>← Gérer les QCM</Link>}
+        <Link to="/qcm/gerer" className="home-btn" style={{ marginBottom: 16, display: 'inline-flex' }}>← Gérer les QCM</Link>
         <div className="card">
           <div className="question-meta">
             <span>Aperçu — Question {apercuIndex + 1}/{questions.length}</span>
@@ -364,22 +385,20 @@ export default function QcmDetail() {
             <button className="btn btn-outline" disabled={apercuIndex === 0} onClick={() => setApercuIndex((i) => i - 1)}>← Précédent</button>
             <button className="btn" disabled={apercuIndex === questions.length - 1} onClick={() => setApercuIndex((i) => i + 1)}>Suivant →</button>
           </div>
-          {!qcm.est_prive && (
-            <div style={{ marginTop: 16 }}>
-              {signalementEnvoye ? <p style={{ fontSize: '0.78rem', color: 'var(--success)' }}>Signalement envoyé.</p>
-                : signalementOuvert ? (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input value={messageSignalement} onChange={(e) => setMessageSignalement(e.target.value)} placeholder="Décris le problème..." style={{ flex: 1 }} />
-                    <button className="btn btn-outline" onClick={() => envoyerSignalement(q)}>Envoyer</button>
-                    <button className="btn btn-ghost" onClick={() => setSignalementOuvert(false)}>Annuler</button>
-                  </div>
-                ) : (
-                  <button onClick={() => setSignalementOuvert(true)} className="btn-ghost" style={{ background: 'none', border: 'none', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline' }}>
-                    🚩 Signaler une erreur
-                  </button>
-                )}
-            </div>
-          )}
+          <div style={{ marginTop: 16 }}>
+            {signalementEnvoye ? <p style={{ fontSize: '0.78rem', color: 'var(--success)' }}>Signalement envoyé.</p>
+              : signalementOuvert ? (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input value={messageSignalement} onChange={(e) => setMessageSignalement(e.target.value)} placeholder="Décris le problème..." style={{ flex: 1 }} />
+                  <button className="btn btn-outline" onClick={() => envoyerSignalement(q)}>Envoyer</button>
+                  <button className="btn btn-ghost" onClick={() => setSignalementOuvert(false)}>Annuler</button>
+                </div>
+              ) : (
+                <button onClick={() => setSignalementOuvert(true)} className="btn-ghost" style={{ background: 'none', border: 'none', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline' }}>
+                  🚩 Signaler une erreur
+                </button>
+              )}
+          </div>
         </div>
       </div>
     );
@@ -476,9 +495,7 @@ export default function QcmDetail() {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 15, marginTop: 40 }}>
-          <Link to={qcm.est_prive ? '/espace-perso' : '/qcm'} className="btn btn-outline" style={{ textDecoration: 'none' }}>
-            {qcm.est_prive ? "Retour à l'espace perso" : "Retour aux QCM"}
-          </Link>
+          <Link to="/qcm" className="btn btn-outline" style={{ textDecoration: 'none' }}>Retour aux QCM</Link>
         </div>
       </div>
     );
@@ -489,7 +506,6 @@ export default function QcmDetail() {
     const dureeEstimee = qcm.duree_minutes || Math.max(5, Math.round((qcm.nb_questions || questions.length) * 0.75));
     return (
       <div className="container" style={{ maxWidth: 700, textAlign: 'center' }}>
-        {qcm.est_prive && <Link to="/espace-perso" className="home-btn" style={{ marginBottom: 16, display: 'inline-flex' }}>← Espace perso</Link>}
         <h1 style={{ color: 'var(--accent)', fontSize: '2.4rem', margin: '10px 0 0' }}>{qcm.titre}</h1>
         <p style={{ color: 'var(--text-muted)', margin: '10px 0' }}>
           {qcm.nb_questions} Questions à Choix Multiples · Temps estimé {dureeEstimee} min
@@ -522,7 +538,7 @@ export default function QcmDetail() {
   return (
     <div className="container" style={{ maxWidth: 760 }}>
       <div className="header-bar">
-        <button className="home-btn" onClick={() => navigate(qcm.est_prive ? '/espace-perso' : '/qcm')}>← Index</button>
+        <button className="home-btn" onClick={() => navigate('/qcm')}>← Index</button>
         <button className="icon-btn" onClick={() => setNavOuverte(true)}>☰</button>
         <div className={`timer ${isConcours && timeLeft < 300 ? 'danger' : ''}`}>{timeLabel}</div>
         <div className="header-actions">
@@ -572,22 +588,20 @@ export default function QcmDetail() {
 
         {erreur && <div className="error-msg">{erreur}</div>}
 
-        {!qcm.est_prive && (
-          <div style={{ marginTop: 16 }}>
-            {signalementEnvoye ? <p style={{ fontSize: '0.78rem', color: 'var(--success)' }}>Signalement envoyé, merci !</p>
-              : signalementOuvert ? (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input value={messageSignalement} onChange={(e) => setMessageSignalement(e.target.value)} placeholder="Décris le problème..." style={{ flex: 1 }} />
-                  <button className="btn btn-outline" onClick={() => envoyerSignalement(currentQuestion)}>Envoyer</button>
-                  <button className="btn btn-ghost" onClick={() => setSignalementOuvert(false)}>Annuler</button>
-                </div>
-              ) : (
-                <button onClick={() => setSignalementOuvert(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline' }}>
-                  🚩 Signaler une erreur sur cette question
-                </button>
-              )}
-          </div>
-        )}
+        <div style={{ marginTop: 16 }}>
+          {signalementEnvoye ? <p style={{ fontSize: '0.78rem', color: 'var(--success)' }}>Signalement envoyé, merci !</p>
+            : signalementOuvert ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={messageSignalement} onChange={(e) => setMessageSignalement(e.target.value)} placeholder="Décris le problème..." style={{ flex: 1 }} />
+                <button className="btn btn-outline" onClick={() => envoyerSignalement(currentQuestion)}>Envoyer</button>
+                <button className="btn btn-ghost" onClick={() => setSignalementOuvert(false)}>Annuler</button>
+              </div>
+            ) : (
+              <button onClick={() => setSignalementOuvert(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline' }}>
+                🚩 Signaler une erreur sur cette question
+              </button>
+            )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
@@ -597,8 +611,14 @@ export default function QcmDetail() {
         {!isConcours && !isValidatedNow && <button className="btn btn-ghost" onClick={passerQuestion}>Passer</button>}
         {!isConcours && !isValidatedNow && <button className="btn" onClick={validerEntrainement}>Valider</button>}
         {(isConcours || isValidatedNow) && (
-          <button className="btn" onClick={currentIndex === questions.length - 1 ? (isConcours ? soumettreConcours : next) : next}>
-            {currentIndex === questions.length - 1 ? (isConcours ? 'Enregistrer' : 'Terminer') : (isConcours ? 'Enregistrer & Suivant' : 'Suivant →')}
+          <button
+            className="btn"
+            disabled={currentIndex === questions.length - 1 && soumissionEnCours}
+            onClick={currentIndex === questions.length - 1 ? (isConcours ? soumettreConcours : next) : next}
+          >
+            {currentIndex === questions.length - 1
+              ? (soumissionEnCours ? 'Enregistrement...' : (isConcours ? 'Enregistrer' : 'Terminer'))
+              : (isConcours ? 'Enregistrer & Suivant' : 'Suivant →')}
           </button>
         )}
       </div>

@@ -21,7 +21,6 @@ import Statistiques from './pages/Statistiques';
 import Comptes from './pages/Comptes';
 import EditionQcm from './pages/EditionQcm';
 import RevisionErreurs from './pages/RevisionErreurs';
-import EspacePerso from './pages/EspacePerso';
 import MesStats from './pages/MesStats';
 import FicheTuteur from './pages/FicheTuteur';
 import './styles/theme.css';
@@ -62,7 +61,6 @@ function App() {
           <Route path="/comptes" element={<Comptes />} />
           <Route path="/qcm/:id/modifier" element={<EditionQcm />} />
           <Route path="/carnet-erreurs/revision" element={<RevisionErreurs />} />
-          <Route path="/espace-perso" element={<EspacePerso />} />
           <Route path="/mes-stats" element={<MesStats />} />
           <Route path="/tuteurs/:id" element={<FicheTuteur />} />
         </Route>

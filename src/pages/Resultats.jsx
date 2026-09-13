@@ -8,7 +8,6 @@ export default function Resultats() {
   const [filtreMatiere, setFiltreMatiere] = useState('toutes');
   const [filtreType, setFiltreType] = useState('tous');
   const [recherche, setRecherche] = useState('');
-  const [monRole, setMonRole] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -18,7 +17,6 @@ export default function Resultats() {
       const uid = session.session.user.id;
 
       const { data: moi } = await supabase.from('profiles').select('role, categorie_compte').eq('id', uid).single();
-      setMonRole(moi?.role);
       if (moi?.role === 'etudiant' && moi?.categorie_compte === 'annale') { navigate('/accueil'); return; }
 
       const { data: mats } = await supabase.from('matieres').select('*').order('nom');
@@ -64,9 +62,6 @@ export default function Resultats() {
 
   return (
     <div className="container">
-      {monRole === 'proprietaire' && (
-        <Link to="/espace-perso" className="home-btn" style={{ display: 'inline-flex', marginBottom: 16 }}>← Espace perso</Link>
-      )}
       <h1 className="page-title">Résultats</h1>
       <p className="page-sub">L'historique complet de tes tentatives.</p>
 

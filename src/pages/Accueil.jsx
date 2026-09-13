@@ -216,7 +216,7 @@ export default function Accueil() {
           <span style={{ fontSize: '3rem' }}>🎓</span>
         </div>
         <h1 className="page-title">Salut {profil.pseudo} !</h1>
-        <p className="page-sub" style={{ marginBottom: 28 }}>Retrouve ici toutes les annales disponibles.</p>
+        <p className="page-sub">Retrouve ici toutes les annales disponibles.</p>
         <Link to="/qcm" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block', padding: '14px 32px' }}>
           Voir les annales →
         </Link>

@@ -120,11 +120,7 @@ export default function Navbar() {
 
   return (
     <nav className="navbar">
-      <div
-        className="logo"
-        style={{ cursor: profil.role === 'proprietaire' ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 12 }}
-        onDoubleClick={() => { if (profil.role === 'proprietaire') navigate('/espace-perso'); }}
-      >
+      <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <img
           src={(profil.theme_pref || 'dark') === 'dark' ? '/logo-dark.png' : '/logo-light.png'}
           alt="Outremed"

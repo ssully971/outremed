@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { validerJsonQcm, trouverParNom, PROMPT_IMPORT_QCM, EXEMPLE_JSON_QCM } from '../lib/importQcmSchema';
+import { validerJsonContenuQcm, construirePromptImport, EXEMPLE_JSON_CONTENU } from '../lib/importQcmSchema';
 
 function copier(texte, setCopie) {
   navigator.clipboard.writeText(texte).then(() => {
@@ -8,7 +8,7 @@ function copier(texte, setCopie) {
   });
 }
 
-function ModalPrompt({ onFermer }) {
+function ModalPrompt({ prompt, onFermer }) {
   const [copiePrompt, setCopiePrompt] = useState(false);
   const [copieExemple, setCopieExemple] = useState(false);
 
@@ -21,21 +21,22 @@ function ModalPrompt({ onFermer }) {
         </div>
         <p className="modal-sub">
           Copie ce prompt dans ChatGPT, Claude ou un autre outil d'IA, colle-le en premier message, puis donne-lui le QCM
-          existant à retranscrire ou le cours à partir duquel générer les questions. Colle ensuite sa réponse JSON ci-dessous.
+          existant à retranscrire ou le(s) cours à partir duquel générer les questions. Colle ensuite sa réponse JSON ci-dessous.
+          Le nombre de questions, d'items et les cours ont déjà été pré-remplis d'après l'étape précédente — vérifie-les avant de copier.
         </p>
         <div style={{ overflowY: 'auto' }}>
           <pre style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 16, fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
-            {PROMPT_IMPORT_QCM}
+            {prompt}
           </pre>
-          <button type="button" className="btn btn-outline" style={{ width: '100%', marginTop: 12 }} onClick={() => copier(PROMPT_IMPORT_QCM, setCopiePrompt)}>
+          <button type="button" className="btn btn-outline" style={{ width: '100%', marginTop: 12 }} onClick={() => copier(prompt, setCopiePrompt)}>
             {copiePrompt ? '✓ Copié' : '📋 Copier le prompt'}
           </button>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 22, marginBottom: 8 }}>Format JSON attendu (rappel) :</p>
           <pre style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 16, fontSize: '0.78rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
-            {EXEMPLE_JSON_QCM}
+            {EXEMPLE_JSON_CONTENU}
           </pre>
-          <button type="button" className="btn btn-ghost" style={{ width: '100%', marginTop: 10 }} onClick={() => copier(EXEMPLE_JSON_QCM, setCopieExemple)}>
+          <button type="button" className="btn btn-ghost" style={{ width: '100%', marginTop: 10 }} onClick={() => copier(EXEMPLE_JSON_CONTENU, setCopieExemple)}>
             {copieExemple ? '✓ Copié' : '📋 Copier juste le format'}
           </button>
         </div>
@@ -44,60 +45,35 @@ function ModalPrompt({ onFermer }) {
   );
 }
 
-// Zone de collage + validation d'un QCM au format JSON. Ne connaît pas Supabase : elle
-// résout les noms de matière/cours face aux listes déjà chargées par CreationQcm, puis
-// renvoie des données prêtes à remplir le formulaire manuel (matiereId éventuellement vide
-// si non trouvée — le tuteur la choisit ou la crée ensuite avec le "+").
-export default function ImportJsonQcm({ matieres, cours, onImporte }) {
+// Zone de collage + validation du CONTENU d'un QCM (questions/items) au format JSON — les
+// métadonnées (titre, matière, cours, type) ont déjà été saisies à l'étape 1 et ne sont pas
+// redemandées ici. Utilisée à l'étape 2 de CreationQcm, en alternative à la saisie manuelle.
+export default function ImportJsonQcm({ nbQuestionsAttendu, nbItemsAttendu, coursDescription, onImporte }) {
   const [texteJson, setTexteJson] = useState('');
   const [erreurs, setErreurs] = useState([]);
   const [promptOuvert, setPromptOuvert] = useState(false);
 
-  function analyser() {
-    setErreurs([]);
-    if (!texteJson.trim()) { setErreurs(['Colle d\'abord un JSON avant d\'analyser.']); return; }
+  const prompt = construirePromptImport({ nbQuestions: nbQuestionsAttendu, nbItems: nbItemsAttendu, coursDescription });
 
-    const resultat = validerJsonQcm(texteJson);
+  function importer() {
+    setErreurs([]);
+    if (!texteJson.trim()) { setErreurs(["Colle d'abord un JSON avant d'importer."]); return; }
+
+    const resultat = validerJsonContenuQcm(texteJson);
     if (!resultat.ok) { setErreurs(resultat.erreurs); return; }
 
-    const { donnees, avertissements } = resultat;
-    const matiereTrouvee = trouverParNom(matieres, donnees.nomMatiere);
-    const coursDisponibles = matiereTrouvee ? cours.filter((c) => c.matiere_id === matiereTrouvee.id) : [];
-    const coursTrouve = donnees.nomCours ? trouverParNom(coursDisponibles, donnees.nomCours) : null;
-
-    const avertissementsNoms = [...avertissements];
-    if (!matiereTrouvee) avertissementsNoms.push(`Matière "${donnees.nomMatiere}" introuvable — sélectionne-la ou crée-la ci-dessous.`);
-    if (donnees.nomCours && !coursTrouve) avertissementsNoms.push(`Cours "${donnees.nomCours}" introuvable dans cette matière — sélectionne-le ou crée-le ci-dessous.`);
-
-    let coursAnnaleIds = [];
-    if (donnees.typeGeneral === 'annale') {
-      const listeCoursPourMatiere = matiereTrouvee ? cours.filter((c) => c.matiere_id === matiereTrouvee.id) : [];
-      const introuvables = [];
-      coursAnnaleIds = donnees.nomsCoursAnnale
-        .map((n) => {
-          const trouve = trouverParNom(listeCoursPourMatiere, n);
-          if (!trouve) introuvables.push(n);
-          return trouve?.id;
-        })
-        .filter(Boolean);
-      if (introuvables.length > 0) avertissementsNoms.push(`Cours d'annale introuvables : ${introuvables.join(', ')} — à rattacher manuellement à l'étape suivante si besoin.`);
+    const avertissements = [...resultat.avertissements];
+    if (resultat.questions.length !== nbQuestionsAttendu) {
+      avertissements.push(`${resultat.questions.length} question(s) importée(s) alors que ${nbQuestionsAttendu} étaient configurées à l'étape précédente.`);
     }
 
-    onImporte({
-      titre: donnees.titre,
-      matiereId: matiereTrouvee?.id || '',
-      coursId: coursTrouve?.id || '',
-      typeGeneral: donnees.typeGeneral,
-      coursAnnaleIds,
-      questions: donnees.questions,
-      avertissements: avertissementsNoms,
-    });
+    onImporte({ questions: resultat.questions, avertissements });
   }
 
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Colle ici le JSON généré par une IA</label>
+        <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Colle ici le contenu JSON généré par une IA</label>
         <button type="button" className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => setPromptOuvert(true)}>
           📋 Voir le prompt à copier
         </button>
@@ -105,7 +81,7 @@ export default function ImportJsonQcm({ matieres, cours, onImporte }) {
       <textarea
         value={texteJson}
         onChange={(e) => setTexteJson(e.target.value)}
-        placeholder={EXEMPLE_JSON_QCM}
+        placeholder={EXEMPLE_JSON_CONTENU}
         spellCheck={false}
         style={{ width: '100%', minHeight: 260, fontFamily: 'monospace', fontSize: '0.8rem', marginTop: 10, marginBottom: 14 }}
       />
@@ -119,9 +95,9 @@ export default function ImportJsonQcm({ matieres, cours, onImporte }) {
         </div>
       )}
 
-      <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={analyser}>Analyser le JSON →</button>
+      <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={importer}>Importer le contenu →</button>
 
-      {promptOuvert && <ModalPrompt onFermer={() => setPromptOuvert(false)} />}
+      {promptOuvert && <ModalPrompt prompt={prompt} onFermer={() => setPromptOuvert(false)} />}
     </div>
   );
 }

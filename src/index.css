@@ -848,9 +848,6 @@ section { margin-bottom: 40px; }
 .heat-day { width: 16px; height: 16px; border-radius: 4px; background: var(--bg-panel); transition: var(--transition); }
 .heat-day.active { background: var(--accent); }
 
-/* ===== ESPACE PERSO (EASTER EGG) ===== */
-.secret-badge { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(120deg, var(--accent-glow), rgba(168,85,247,0.15)); border: 1px dashed var(--accent); border-radius: 20px; padding: 8px 16px; font-size: 0.78rem; font-weight: 700; color: var(--accent); margin-bottom: 24px; }
-
 /* ===== HISTORIQUE (TIMELINE) ===== */
 .timeline { position: relative; padding-left: 24px; }
 .timeline::before { content: ''; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }

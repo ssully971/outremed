@@ -40,17 +40,10 @@ export default function EditionQcm() {
     const { data: its } = await supabase.from('items').select('*').in('question_id', (qs || []).map((q) => q.id));
     setQuestions((qs || []).map((q) => ({ ...q, items: (its || []).filter((i) => i.question_id === q.id) })));
 
-    if (qcmData?.est_prive) {
-      const { data: mats } = await supabase.from('matieres').select('*').eq('est_prive', true).eq('cree_par', uid).order('nom');
-      setMatieres(mats || []);
-      const { data: crs } = await supabase.from('cours').select('*').eq('est_prive', true).eq('cree_par', uid).order('nom');
-      setCours(crs || []);
-    } else {
-      const { data: mats } = await supabase.from('matieres').select('*').eq('est_prive', false).order('nom');
-      setMatieres(mats || []);
-      const { data: crs } = await supabase.from('cours').select('*').eq('est_prive', false).order('nom');
-      setCours(crs || []);
-    }
+    const { data: mats } = await supabase.from('matieres').select('*').eq('est_prive', false).order('nom');
+    setMatieres(mats || []);
+    const { data: crs } = await supabase.from('cours').select('*').eq('est_prive', false).order('nom');
+    setCours(crs || []);
 
     setChargement(false);
   }
@@ -123,17 +116,14 @@ export default function EditionQcm() {
       }
     }
 
-    // Un QCM privé ne doit laisser aucune trace dans l'historique consultable par les autres tuteurs
-    if (!qcm.est_prive) {
-      await supabase.from('historique_qcm').insert({
-        qcm_id: id, action: 'modification', effectue_par: monId,
-        details: `${qcm.titre} — modifié`,
-      });
+    await supabase.from('historique_qcm').insert({
+      qcm_id: id, action: 'modification', effectue_par: monId,
+      details: `${qcm.titre} — modifié`,
+    });
 
-      const { data: autresAdmins } = await supabase.from('profils_publics').select('id').in('role', ['tuteur', 'proprietaire']).neq('id', monId);
-      if (autresAdmins && autresAdmins.length > 0) {
-        await envoyerNotificationGroupe(autresAdmins.map((a) => a.id), 'nouveau_qcm_pair', `QCM modifié : ${qcm.titre}`, `/qcm/${id}/modifier`);
-      }
+    const { data: autresAdmins } = await supabase.from('profils_publics').select('id').in('role', ['tuteur', 'proprietaire']).neq('id', monId);
+    if (autresAdmins && autresAdmins.length > 0) {
+      await envoyerNotificationGroupe(autresAdmins.map((a) => a.id), 'nouveau_qcm_pair', `QCM modifié : ${qcm.titre}`, `/qcm/${id}/modifier`);
     }
 
     setEnregistrement(false);
@@ -145,12 +135,9 @@ export default function EditionQcm() {
 
   return (
     <div className="container" style={{ maxWidth: 700 }}>
-      <Link to={qcm.est_prive ? '/espace-perso' : '/qcm/gerer'} style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textDecoration: 'none' }}>
-        ← Retour à {qcm.est_prive ? "l'espace perso" : 'Gérer les QCM'}
-      </Link>
+      <Link to="/qcm/gerer" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textDecoration: 'none' }}>← Retour à Gérer les QCM</Link>
 
       <h1 className="page-title" style={{ marginTop: 12 }}>Modifier le QCM</h1>
-      {qcm.est_prive && <span className="status-tag status-pending" style={{ marginBottom: 16, display: 'inline-block' }}>Privé</span>}
 
       <div className="settings-card">
         <div className="field">
@@ -174,20 +161,16 @@ export default function EditionQcm() {
           </select>
         </div>
 
-        {!qcm.est_prive && (
-          <>
-            <div className="field">
-              <label>Semestre</label>
-              <input value={qcm.semestre || ''} onChange={(e) => majQcm('semestre', e.target.value)} placeholder="2025-S1" />
-            </div>
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={qcm.is_classe} onChange={(e) => majQcm('is_classe', e.target.checked)} style={{ width: 'auto' }} />
-                Ce QCM alimente un classement
-              </label>
-            </div>
-          </>
-        )}
+        <div className="field">
+          <label>Semestre</label>
+          <input value={qcm.semestre || ''} onChange={(e) => majQcm('semestre', e.target.value)} placeholder="2025-S1" />
+        </div>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={qcm.is_classe} onChange={(e) => majQcm('is_classe', e.target.checked)} style={{ width: 'auto' }} />
+            Ce QCM alimente un classement
+          </label>
+        </div>
 
         <p className="field-hint" style={{ marginTop: 16 }}>Le type de QCM ne peut pas être changé une fois créé — supprime et recrée si besoin.</p>
       </div>
@@ -201,12 +184,10 @@ export default function EditionQcm() {
         <div key={q.id} id={`question-${qIdx}`} className="card" style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <strong>Question {qIdx + 1}</strong>
-            {!qcm.est_prive && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="icon-action" style={{ color: 'var(--warning)', width: 'auto', padding: '0 10px' }} title="Mettre en doute" onClick={() => setSignalementOuvert(signalementOuvert === qIdx ? null : qIdx)}>🚩</button>
-                <button className="icon-action" style={{ width: 'auto', padding: '0 10px' }} title="Aperçu étudiant" onClick={() => setApercuOuvert(apercuOuvert === qIdx ? null : qIdx)}>👁</button>
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="icon-action" style={{ color: 'var(--warning)', width: 'auto', padding: '0 10px' }} title="Mettre en doute" onClick={() => setSignalementOuvert(signalementOuvert === qIdx ? null : qIdx)}>🚩</button>
+              <button className="icon-action" style={{ width: 'auto', padding: '0 10px' }} title="Aperçu étudiant" onClick={() => setApercuOuvert(apercuOuvert === qIdx ? null : qIdx)}>👁</button>
+            </div>
           </div>
 
           {signalementOuvert === qIdx && (

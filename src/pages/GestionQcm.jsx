@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { envoyerNotification, envoyerNotificationGroupe } from '../lib/notifier';
+import { exporterUnQcm, exporterSelectionQcm } from '../lib/exportQcm';
 import PopupMatieres from '../components/PopupMatieres';
 
 export default function GestionQcm() {
@@ -163,6 +164,23 @@ export default function GestionQcm() {
     charger();
   }
 
+  async function exporter(qcm) {
+    try {
+      await exporterUnQcm(qcm, matieres);
+    } catch (e) {
+      alert("Erreur lors de l'export : " + e.message);
+    }
+  }
+
+  async function exporterSelectionCourante() {
+    if (selection.length === 0) return;
+    try {
+      await exporterSelectionQcm(qcms.filter((q) => selection.includes(q.id)), matieres);
+    } catch (e) {
+      alert("Erreur lors de l'export : " + e.message);
+    }
+  }
+
   async function verifier(qcm) {
     const { data: session } = await supabase.auth.getSession();
     await supabase.from('qcms').update({
@@ -296,6 +314,7 @@ export default function GestionQcm() {
             )}
             <button className="icon-action" title={qcm.visible ? 'Masquer' : 'Remontrer'} onClick={() => basculerVisibilite(qcm)}>{qcm.visible ? '🗄' : '👁‍🗨'}</button>
             <button className="icon-action" title="Dupliquer" onClick={() => dupliquer(qcm)}>📋</button>
+            <button className="icon-action" title="Exporter en JSON" onClick={() => exporter(qcm)}>⬇️</button>
             <button className="icon-action" title="Historique" onClick={() => ouvrirHistorique(qcm.id)}>🕒</button>
             <button className="icon-action danger" title="Supprimer" onClick={() => supprimer(qcm)}>🗑</button>
           </div>
@@ -468,6 +487,7 @@ export default function GestionQcm() {
             <button className="btn btn-outline btn-sm" disabled={!matiereDeplacement} onClick={deplacerSelection}>Déplacer</button>
             <button className="btn btn-outline btn-sm" onClick={validerSelection}>✓ Valider</button>
             <button className="btn btn-outline btn-sm" onClick={masquerSelection}>Masquer</button>
+            <button className="btn btn-outline btn-sm" onClick={exporterSelectionCourante}>⬇️ Exporter</button>
             <button className="btn btn-danger btn-sm" onClick={supprimerSelection}>Supprimer</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setSelection([])}>Annuler</button>
           </div>
@@ -481,6 +501,7 @@ export default function GestionQcm() {
         <span>🗄 Masquer</span>
         <span>👁‍🗨 Remontrer</span>
         <span>📋 Dupliquer</span>
+        <span>⬇️ Exporter en JSON</span>
         <span>🕒 Historique</span>
         <span>🗑 Supprimer</span>
       </div>

@@ -1,57 +1,155 @@
-// Schéma JSON standard pour l'import rapide de QCM (voir CreationQcm.jsx / ImportJsonQcm.jsx)
+// Schéma JSON standard pour l'import rapide du contenu d'un QCM (voir CreationQcm.jsx / ImportJsonQcm.jsx).
+// Les métadonnées (titre, matière, cours, type) sont saisies à l'étape 1 ; le JSON ne contient que le contenu.
 
-export const TYPES_QCM_VALIDES = ['entrainement', 'kholle', 'annale', 'concours_blanc'];
 export const NB_ITEMS_MIN = 2;
 export const NB_ITEMS_MAX = 8; // limité par LETTRES = 'ABCDEFGH' dans CreationQcm.jsx
 
-export const EXEMPLE_JSON_QCM = `{
-  "titre": "Nom du QCM",
-  "matiere": "Nom de la matière",
-  "cours": "Nom du cours (optionnel)",
-  "type_qcm": "entrainement",
+export const EXEMPLE_JSON_CONTENU = `{
   "questions": [
     {
       "enonce": "Texte de la question",
       "items": [
-        { "lettre": "A", "texte": "Texte de l'item", "est_correct": true, "correction": "Explication de la réponse" },
-        { "lettre": "B", "texte": "Texte de l'item", "est_correct": false, "correction": "Explication de la réponse" }
+        { "lettre": "A", "texte": "Texte de la proposition", "est_correct": true, "correction": "Explication" },
+        { "lettre": "B", "texte": "...", "est_correct": false, "correction": "..." }
       ]
     }
   ]
 }`;
 
-export const PROMPT_IMPORT_QCM = `Tu es un générateur de QCM médicaux au format JSON pour la plateforme Outremed.
+const MODELE_PROMPT = `Tu es un enseignant spécialisé dans la création de QCM médicaux pour des étudiants en
+médecine, au format des colles/PASS-LAS.
 
-Avant de commencer, demande-moi ces informations si je ne te les ai pas déjà données :
-- Matière
-- Type de QCM (entrainement, annale ou concours_blanc)
-- Nom du QCM
-- Nombre de questions
-- Nombre d'items par question (entre 2 et 8)
+PARAMÈTRES (à préciser avant de lancer) :
+- Nombre de questions : {{NB_QUESTIONS}}
+- Nombre d'items par question : {{NB_ITEMS}}
+- Cours fournis : {{COURS}}
 
-Tu vas ensuite recevoir soit :
-1. Un QCM déjà existant (texte, photo retranscrite, etc.) → tu dois le retranscrire intégralement dans le format ci-dessous, sans rien inventer, résumer ni corriger le contenu médical.
-2. Un cours (texte de contenu) → tu dois générer un QCM original à partir de ce cours, avec le nombre de questions et d'items demandé, en respectant fidèlement le contenu du cours (aucune invention médicale).
+DEUX CAS DE FIGURE POSSIBLES :
+1. Si je te fournis un QCM déjà rédigé en texte (énoncés + propositions, avec ou sans
+   correction) : retranscris-le intégralement et fidèlement au format JSON demandé
+   ci-dessous, sans reformuler ni modifier le contenu, les questions ni les propositions.
+2. Si je te fournis un ou plusieurs cours (contenu de cours, pas un QCM) : génère un QCM
+   entièrement nouveau à partir de ce contenu, en respectant toutes les règles ci-dessous.
 
-Réponds UNIQUEMENT avec le JSON, sans texte avant/après, sans balises markdown \`\`\`, exactement dans ce format :
+# 1. Fidélité au cours
 
-${EXEMPLE_JSON_QCM}
+- Utilise exclusivement les informations présentes dans le ou les cours fournis.
+- N'ajoute pas de connaissances extérieures, sauf si cela est indispensable pour corriger
+  une incohérence manifeste.
+- Si une information est absente, ambiguë ou contradictoire dans le cours, ne l'utilise pas
+  plutôt que d'inventer.
+- Respecte la terminologie, les définitions, les chiffres, les rapports anatomiques, les
+  classifications et les exceptions présentés dans le cours.
+- Lorsque plusieurs cours sont fournis, croise-les et signale les éventuelles
+  contradictions entre eux dans ta réflexion (sans les inclure dans le JSON final).
 
-Règles impératives :
-- "type_qcm" doit être exactement l'une de ces valeurs : "entrainement", "kholle", "annale", "concours_blanc".
-- Chaque question doit avoir entre 2 et 8 items.
-- Chaque item doit avoir "est_correct": true ou false (jamais omis).
-- Le champ "correction" doit expliquer pourquoi l'item est vrai ou faux (obligatoire pour un apprentissage utile).
-- "cours" est optionnel : ne le mets que si un nom de cours précis s'applique.
-- Le JSON doit être strictement valide (guillemets doubles, pas de virgule finale).`;
+# 2. Répartition entre les cours fournis
+
+Si un seul cours est fourni, 100 % des questions doivent porter dessus.
+Si plusieurs cours sont fournis, répartis les questions de façon égale entre eux
+(ex : 4 cours fournis → environ 25 % des questions par cours). Si le nombre de questions
+ne se divise pas exactement, répartis le reste aussi équitablement que possible.
+
+# 3. Format des questions
+
+Chaque question comporte un énoncé et exactement {{NB_ITEMS}} propositions
+indépendantes les unes des autres (numérotées A, B, C, D, E...). Chaque proposition est une
+affirmation autonome qui peut être vraie ou fausse indépendamment des autres — ce ne sont
+pas des choix qui s'excluent mutuellement, mais bien des mini-affirmations distinctes à
+évaluer chacune séparément.
+
+# 4. Répartition des questions par thème
+
+Répartis les questions de manière équilibrée entre les différents thèmes importants du
+cours. Mélange les types de questions suivants : définitions, anatomie descriptive,
+rapports anatomiques, insertions/terminaisons/trajets, innervation et vascularisation,
+fonctions et actions musculaires, classifications, comparaisons, vrai/faux déguisés,
+questions de synthèse, cas simples d'application ou de raisonnement, pièges classiques
+fréquents aux examens. Évite de regrouper toutes les questions faciles au début et toutes
+les questions difficiles à la fin.
+
+# 5. Niveau de difficulté
+
+- Environ 30 % de questions faciles (connaissances fondamentales)
+- Environ 50 % de questions intermédiaires (distinguer plusieurs notions proches)
+- Environ 20 % de questions difficiles (pièges raisonnables, nécessitant un raisonnement)
+
+Les pièges doivent rester loyaux et reposer uniquement sur le contenu du cours. Ne crée
+jamais de piège fondé sur une faute d'orthographe, une formulation artificiellement
+ambiguë, un détail absent du cours, une différence minime de ponctuation, ou une
+information extérieure non fournie.
+
+# 6. Construction des propositions — règles précises
+
+**Nombre de réponses vraies par question**, avec cette répartition sur l'ensemble du QCM :
+- Le plus souvent : 2 ou 3 réponses vraies par question
+- Un peu plus rarement : 4 réponses vraies
+- Plus rarement encore, mais doivent apparaître au moins une ou deux fois sur l'ensemble
+  du QCM : 1 seule réponse vraie, et à l'inverse toutes les réponses vraies
+- Ne répète jamais le même nombre de réponses vraies sur plusieurs questions d'affilée
+
+**Comment construire une proposition fausse (règle la plus importante)** : la meilleure
+méthode est de partir d'une affirmation vraie et d'en modifier un seul élément précis et
+factuel — un terme technique, un chiffre, un rapport anatomique, une latéralité, une
+proportion — pour la rendre fausse, tout en gardant exactement la même structure de
+phrase. Exemple : dans un QCM sur le membre inférieur, une proposition vraie sur le tibia
+peut devenir fausse en remplaçant "tibia" par "fibula" (ou l'inverse), sans rien changer
+d'autre à la phrase. Ce type de piège teste une vraie connaissance précise plutôt qu'une
+stratégie de repérage. Utilise cette méthode en priorité plutôt que d'inventer une
+affirmation fausse sans rapport avec le cours.
+
+Autres règles :
+- Varie les combinaisons de lettres parmi les réponses correctes (A, AB, AC, BDE, ABCD...)
+  d'une question à l'autre.
+- Les lettres doivent chacune apparaître régulièrement parmi les bonnes réponses sur
+  l'ensemble du QCM — pas de lettre systématiquement vraie ou systématiquement fausse.
+- Évite que la réponse correcte soit systématiquement la proposition la plus longue ou la
+  plus précise.
+- Une proposition fausse doit comporter une seule erreur principale autant que possible.
+- Ne crée pas de doublons ni de propositions formulées de manière équivalente.
+- N'utilise pas "toutes les réponses sont vraies"/"aucune réponse n'est vraie", sauf
+  cas exceptionnel justifié par le cours.
+- Fais attention aux mots comme "toujours", "jamais", "uniquement", "exclusivement",
+  "tous", "aucun" — à n'utiliser que s'ils sont réellement justifiés par le cours.
+
+# 7. Contrôle qualité final (à faire silencieusement, sans le montrer)
+
+Avant de répondre, vérifie que : chaque question a une correction parfaitement
+déterminée ; il n'y a pas de contradiction entre deux propositions ; le nombre de réponses
+justes est bien réparti selon la règle de la section 6 ; les lettres apparaissent
+régulièrement comme bonnes réponses ; toutes les réponses sont justifiables par le cours ;
+la répartition entre les cours fournis (section 2) est respectée.
+
+# 8. Format de sortie — IMPORTANT
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après, exactement
+dans ce format :
+
+${EXEMPLE_JSON_CONTENU}
+
+Inclus une explication ("correction") pour CHAQUE proposition, vraie ou fausse — pas
+seulement pour les fausses. Pour une proposition fausse, l'explication doit préciser
+l'erreur exacte et donner si possible la formulation correcte.
+
+Commence par analyser silencieusement le ou les cours fournis, puis génère uniquement le
+JSON, sans aucun commentaire ni texte d'accompagnement.`;
+
+// Construit le prompt à copier, avec les paramètres déjà connus (nombre de questions, d'items,
+// et cours concernés) pré-remplis à partir de ce que le tuteur a choisi à l'étape 1.
+export function construirePromptImport({ nbQuestions, nbItems, coursDescription }) {
+  return MODELE_PROMPT
+    .replaceAll('{{NB_QUESTIONS}}', String(nbQuestions))
+    .replaceAll('{{NB_ITEMS}}', String(nbItems))
+    .replaceAll('{{COURS}}', coursDescription || '[à préciser]');
+}
 
 function estChaineNonVide(v) {
   return typeof v === 'string' && v.trim().length > 0;
 }
 
-// Parse et valide un texte JSON de QCM. Ne résout pas les noms de matière/cours en id
-// (fait par l'appelant, qui a accès à la liste des matières/cours chargées).
-export function validerJsonQcm(texteJson) {
+// Valide et normalise le contenu JSON collé par le tuteur (uniquement questions/items,
+// pas de métadonnées de QCM). Retourne { ok, erreurs } ou { ok, avertissements, questions }.
+export function validerJsonContenuQcm(texteJson) {
   let brut;
   try {
     brut = JSON.parse(texteJson);
@@ -59,49 +157,20 @@ export function validerJsonQcm(texteJson) {
     return { ok: false, erreurs: [`JSON invalide : ${e.message}`] };
   }
 
-  const erreurs = [];
-  const avertissements = [];
-
   if (!brut || typeof brut !== 'object' || Array.isArray(brut)) {
     return { ok: false, erreurs: ['Le JSON doit être un objet (et non un tableau ou une valeur simple).'] };
   }
 
-  if (!estChaineNonVide(brut.titre)) erreurs.push('Le champ "titre" est obligatoire.');
-  if (!estChaineNonVide(brut.matiere)) erreurs.push('Le champ "matiere" est obligatoire.');
-
-  let typeGeneral = 'entrainement';
-  if (brut.type_qcm !== undefined) {
-    if (!TYPES_QCM_VALIDES.includes(brut.type_qcm)) {
-      erreurs.push(`"type_qcm" doit être l'une de ces valeurs : ${TYPES_QCM_VALIDES.join(', ')} (reçu : ${JSON.stringify(brut.type_qcm)}).`);
-    } else {
-      typeGeneral = brut.type_qcm;
-    }
-  }
-
-  let nomsCoursAnnale = [];
-  let nomCours = '';
-  if (typeGeneral === 'annale') {
-    if (Array.isArray(brut.cours)) {
-      nomsCoursAnnale = brut.cours.filter(estChaineNonVide).map((n) => n.trim());
-    } else if (estChaineNonVide(brut.cours)) {
-      nomsCoursAnnale = [brut.cours.trim()];
-    }
-    if (nomsCoursAnnale.length === 0) erreurs.push('Pour une "annale", le champ "cours" doit contenir au moins un nom de cours (chaîne ou tableau de chaînes).');
-  } else if (brut.cours !== undefined) {
-    if (Array.isArray(brut.cours)) {
-      erreurs.push('Le champ "cours" doit être une simple chaîne de caractères pour ce type de QCM.');
-    } else if (estChaineNonVide(brut.cours)) {
-      nomCours = brut.cours.trim();
-    }
-  }
+  const erreurs = [];
+  const avertissements = [];
 
   const questionsBrutes = Array.isArray(brut.questions) ? brut.questions : null;
   if (!questionsBrutes || questionsBrutes.length === 0) {
-    erreurs.push('Le champ "questions" doit être un tableau non vide.');
+    return { ok: false, erreurs: ['Le champ "questions" doit être un tableau non vide.'] };
   }
 
   const questions = [];
-  (questionsBrutes || []).forEach((q, qIdx) => {
+  questionsBrutes.forEach((q, qIdx) => {
     const numero = qIdx + 1;
     if (!q || typeof q !== 'object') { erreurs.push(`Question ${numero} : doit être un objet.`); return; }
     if (!estChaineNonVide(q.enonce)) erreurs.push(`Question ${numero} : le champ "enonce" est obligatoire.`);
@@ -138,22 +207,5 @@ export function validerJsonQcm(texteJson) {
 
   if (erreurs.length > 0) return { ok: false, erreurs };
 
-  return {
-    ok: true,
-    avertissements,
-    donnees: {
-      titre: brut.titre.trim(),
-      nomMatiere: brut.matiere.trim(),
-      nomCours,
-      nomsCoursAnnale,
-      typeGeneral,
-      questions,
-    },
-  };
-}
-
-export function trouverParNom(liste, nom) {
-  if (!nom) return null;
-  const cible = nom.trim().toLowerCase();
-  return liste.find((el) => el.nom.trim().toLowerCase() === cible) || null;
+  return { ok: true, avertissements, questions };
 }

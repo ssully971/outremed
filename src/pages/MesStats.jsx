@@ -190,7 +190,7 @@ export default function MesStats() {
   return (
     <div className="container" style={{ maxWidth: 720 }}>
       <h1 className="page-title">Mes statistiques</h1>
-      <p className="page-sub" style={{ marginBottom: 24 }}>Ta progression, en détail.</p>
+      <p className="page-sub">Ta progression, en détail.</p>
 
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="stat-box">

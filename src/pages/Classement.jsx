@@ -24,8 +24,10 @@ export default function Classement() {
   const [concoursOuvert, setConcoursOuvert] = useState(null);
 
   const [modifHoraireOuvert, setModifHoraireOuvert] = useState(false);
+  const [nouvelleDate, setNouvelleDate] = useState('');
   const [nouveauDebut, setNouveauDebut] = useState('');
   const [nouveauFin, setNouveauFin] = useState('');
+  const [erreurHoraire, setErreurHoraire] = useState('');
 
   const navigate = useNavigate();
 
@@ -123,15 +125,24 @@ export default function Classement() {
   }
 
   async function enregistrerNouvelHoraire() {
-    if (!semaineActuelle || !nouveauDebut || !nouveauFin) return;
-    await supabase.from('semaines_kholle').update({
+    if (!semaineActuelle || !nouvelleDate || !nouveauDebut || !nouveauFin) return;
+    setErreurHoraire('');
+    if (new Date(nouveauFin) <= new Date(nouveauDebut)) { setErreurHoraire('La fin doit être après le début.'); return; }
+
+    const { error } = await supabase.from('semaines_kholle').update({
+      date_samedi: nouvelleDate,
       debut: new Date(nouveauDebut).toISOString(),
       fin: new Date(nouveauFin).toISOString(),
       modifie_par: monProfil.id,
       modifie_le: new Date().toISOString(),
     }).eq('id', semaineActuelle.id);
 
-    const dateFormatee = new Date(semaineActuelle.date_samedi).toLocaleDateString('fr-FR');
+    if (error) {
+      setErreurHoraire(error.code === '23505' ? 'Une kholle est déjà programmée à cette date.' : 'Erreur : ' + error.message);
+      return;
+    }
+
+    const dateFormatee = new Date(nouvelleDate).toLocaleDateString('fr-FR');
 
     const { data: autresAdmins } = await supabase.from('profiles').select('id').in('role', ['tuteur', 'proprietaire']).neq('id', monProfil.id);
     if (autresAdmins && autresAdmins.length > 0) {
@@ -148,7 +159,7 @@ export default function Classement() {
 
   if (!monProfil) return <div style={{ padding: 40 }}>Chargement...</div>;
 
-  const estProprietaire = monProfil.role === 'proprietaire';
+  const peutCorrigerHoraire = monProfil.role === 'tuteur' || monProfil.role === 'proprietaire';
   const semaineAArafficher = semaineAffichee || semaineActuelle;
   const { parMatiere: parMatiereKholle, general: generalKholle } = calculerClassements(qcmsSemaine, attemptsSemaine);
   const { parMatiere: parMatiereSemestre, general: generalSemestre } = calculerClassements(qcmsSemestre, attemptsSemestre);
@@ -189,21 +200,38 @@ export default function Classement() {
                     </h3>
                     <p className="rc-sub" style={{ margin: '4px 0 0' }}>{qcmsSemaine.length} QCM de kholle cette semaine</p>
                   </div>
-                  {estProprietaire && !semaineAffichee && (
-                    <button className="btn-outline" onClick={() => setModifHoraireOuvert((v) => !v)}>Corriger l'horaire</button>
+                  {peutCorrigerHoraire && !semaineAffichee && (
+                    <button
+                      className="btn-outline"
+                      onClick={() => {
+                        const ouverture = !modifHoraireOuvert;
+                        setModifHoraireOuvert(ouverture);
+                        setErreurHoraire('');
+                        if (ouverture) setNouvelleDate(semaineActuelle.date_samedi);
+                      }}
+                    >
+                      Reporter / corriger l'horaire
+                    </button>
                   )}
                 </div>
 
                 {modifHoraireOuvert && (
                   <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                     <div className="field">
-                      <label>Nouveau début</label>
-                      <input type="datetime-local" value={nouveauDebut} onChange={(e) => setNouveauDebut(e.target.value)} />
+                      <label>Date</label>
+                      <input type="date" value={nouvelleDate} onChange={(e) => setNouvelleDate(e.target.value)} />
                     </div>
-                    <div className="field">
-                      <label>Nouvelle fin</label>
-                      <input type="datetime-local" value={nouveauFin} onChange={(e) => setNouveauFin(e.target.value)} />
+                    <div className="field-row">
+                      <div className="field">
+                        <label>Nouveau début</label>
+                        <input type="datetime-local" value={nouveauDebut} onChange={(e) => setNouveauDebut(e.target.value)} />
+                      </div>
+                      <div className="field">
+                        <label>Nouvelle fin</label>
+                        <input type="datetime-local" value={nouveauFin} onChange={(e) => setNouveauFin(e.target.value)} />
+                      </div>
                     </div>
+                    {erreurHoraire && <div className="error-msg">{erreurHoraire}</div>}
                     <button className="btn" onClick={enregistrerNouvelHoraire}>Enregistrer</button>
                   </div>
                 )}

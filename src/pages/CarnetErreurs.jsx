@@ -8,7 +8,6 @@ export default function CarnetErreurs() {
   const [groupes, setGroupes] = useState({});
   const [matieres, setMatieres] = useState([]);
   const [coursMap, setCoursMap] = useState({});
-  const [monRole, setMonRole] = useState(null);
   const [recherche, setRecherche] = useState('');
   const [filtreMatiere, setFiltreMatiere] = useState('');
   const [carteOuverte, setCarteOuverte] = useState(null);
@@ -20,7 +19,6 @@ export default function CarnetErreurs() {
     const uid = session.session.user.id;
 
     const { data: moi } = await supabase.from('profiles').select('role, categorie_compte').eq('id', uid).single();
-    setMonRole(moi?.role);
     if (moi?.role !== 'proprietaire') {
       const { data: param } = await supabase.from('parametres').select('valeur').eq('cle', 'carnet_erreurs_actif').single();
       const estEtudiantAnnale = moi?.role === 'etudiant' && moi?.categorie_compte === 'annale';
@@ -136,9 +134,6 @@ export default function CarnetErreurs() {
 
   return (
     <div className="container">
-      {monRole === 'proprietaire' && (
-        <Link to="/espace-perso" className="home-btn" style={{ display: 'inline-flex', marginBottom: 16 }}>← Espace perso</Link>
-      )}
       <div className="page-top-row">
         <div>
           <h1 className="page-title">Carnet d'erreurs</h1>

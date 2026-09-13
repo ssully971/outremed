@@ -46,7 +46,8 @@ pattern** pour toute future segmentation de comptes plutôt que de créer un rô
 
 - `profiles` — comptes (role, categorie_compte, statut_compte, essai_fin, compte_actif,
   theme_pref, accent_pref, notif_prefs, session_courante, afficher_position_classement)
-- `matieres`, `cours` — avec `couleur`, `emoji`, `est_prive`/`cree_par` (pour l'espace perso)
+- `matieres`, `cours` — avec `couleur`, `emoji`, `est_prive`/`cree_par` (historique de
+  l'espace perso, supprimé — voir plus bas ; toujours filtré à `false` partout ailleurs)
 - `qcms` — `type_qcm` (entrainement/concours_blanc), `is_annale`, `is_kholle`, `numero`,
   `est_prive`, `visible`, `publie`, `verifie`, `semaine_kholle_id`, `kholle_debut/fin`
 - `questions`, `items` — items ont `est_correct`/`correction`, jamais exposés bruts aux
@@ -85,10 +86,13 @@ masqué) ET au niveau de la page elle-même (redirection si accès direct par UR
 
 ## Fonctionnement des comptes privés / mode annale
 
-- **Espace perso** (easter egg, propriétaire uniquement) : QCM et matières avec
-  `est_prive = true`, entièrement séparés du contenu partagé, suppression en cascade réelle
-  (contrairement aux QCM publics où la suppression est bloquée s'il existe des tentatives
-  d'étudiants — volontaire, pour protéger leurs résultats ; "Masquer" est l'alternative).
+- **Espace perso** (easter egg propriétaire, double-clic sur le logo, page EspacePerso.jsx) :
+  **supprimé le 2026-09-13**, un autre outil est utilisé à la place pour cet usage personnel.
+  La colonne `est_prive` sur `matieres`/`cours`/`qcms` reste en base (elle sert aussi à
+  filtrer le contenu public partout ailleurs — ne pas la supprimer sans vérifier tous ses
+  usages) mais plus aucune UI ne permet de créer du nouveau contenu privé ; d'éventuelles
+  lignes `est_prive = true` restantes sont des données historiques, inaccessibles depuis le
+  site.
 - **Mode annale** (`parametres.mode_site = 'annale'`) : restreint temporairement le site
   aux QCM d'annales. Un compte `categorie_compte = 'annale'` ne voit que la page QCM
   (filtrée sur les annales), peu importe le mode global du site — la restriction est liée
@@ -119,8 +123,11 @@ sur un échec réseau silencieux (bug rencontré et corrigé à plusieurs endroi
   changées en `ON DELETE SET NULL` ou `ON DELETE CASCADE` directement en base** (voir plus
   bas) — le nettoyage manuel dans le code est redondant mais gardé par clarté.
 - `grade-qcm` — corrige une tentative en mode concours, calcule le score, enregistre
-  `attempts`/`attempt_answers`. Bloque une deuxième tentative uniquement pour les QCM
-  `concours_blanc` **non privés** (jamais pour l'espace perso).
+  `attempts`/`attempt_answers`. Bloque une deuxième tentative pour les QCM `concours_blanc`
+  (la condition `!qcm.est_prive` restante dans le code ne joue plus qu'un rôle historique
+  depuis la suppression de l'espace perso — jamais faux en pratique aujourd'hui).
+  Protection redondante côté DB : trigger `trg_tentative_unique` (BEFORE INSERT sur
+  `attempts`) refuse aussi un doublon pour `concours_blanc`.
 - `attempt-detail`, `revision-erreurs` — lecture de détail, pas d'action sensible
 
 ## Contraintes de clé étrangère — historique important
@@ -171,7 +178,7 @@ Accueil, Login (page de présentation + connexion), ListeQcm, QcmDetail (passati
 CreationQcm, EditionQcm, GestionQcm (+ signalements, dupliquer, masquer), Resultats,
 CarnetErreurs, RevisionErreurs, DetailTentative, Classement, Statistiques, Comptes,
 FicheEtudiant, FicheTuteur, Profil (paramètres + site + annonces), Historiques, Forum,
-Planning, MesStats, EspacePerso, DefinirMotDePasse.
+Planning, MesStats, DefinirMotDePasse.
 
 ## Ce qui reste à faire / pistes connues
 
