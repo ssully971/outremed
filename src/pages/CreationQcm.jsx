@@ -212,11 +212,13 @@ export default function CreationQcm() {
       }
     }
 
+    const publieFinal = is_kholle ? true : publierMaintenant;
+
     const { data: qcm, error } = await supabase.from('qcms').insert({
       titre, matiere_id: matiereId, cours_id: typeGeneral !== 'annale' ? (coursId || null) : null,
       type_qcm, is_annale, is_classe: isClasse, is_kholle, semaine_kholle_id: semaineKholleId,
       kholle_debut: kholleDebutFinal, kholle_fin: kholleFinFinal, nb_questions: nbQuestions, nb_items: nbItems,
-      semestre: semestre || null, publie: publierMaintenant, duree_minutes: type_qcm === 'concours_blanc' ? 30 : null, cree_par: userId,
+      semestre: semestre || null, publie: publieFinal, duree_minutes: type_qcm === 'concours_blanc' ? 30 : null, cree_par: userId,
     }).select().single();
 
     if (error) { setMessage('Erreur : ' + error.message); setEnCours(false); return; }
@@ -234,8 +236,10 @@ export default function CreationQcm() {
 
     await supabase.from('historique_qcm').insert({ qcm_id: qcm.id, action: 'creation', effectue_par: userId, details: `${titre} — ${questions.length} questions, marqué "à vérifier"` });
 
+    const kholleDejaOuverte = !is_kholle || new Date(kholleDebutFinal) <= new Date();
+
     const { data: etudiants } = await supabase.from('profiles').select('id').eq('role', 'etudiant');
-    if (publierMaintenant && etudiants && etudiants.length > 0) {
+    if (publieFinal && kholleDejaOuverte && etudiants && etudiants.length > 0) {
       await envoyerNotificationGroupe(etudiants.map((e) => e.id), 'qcm_publie', `Nouveau QCM disponible : ${titre}`, `/qcm/${qcm.id}`);
     }
 
@@ -386,13 +390,17 @@ export default function CreationQcm() {
             <input value={semestre} onChange={(e) => setSemestre(e.target.value)} placeholder="2025-S1" />
           </div>
 
-          <div className="field">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={publierMaintenant} onChange={(e) => setPublierMaintenant(e.target.checked)} style={{ width: 'auto' }} />
-              Publier immédiatement
-            </label>
-            {!publierMaintenant && <p className="field-hint">Le QCM sera enregistré en brouillon — invisible des étudiants tant que tu ne le publies pas depuis "Gérer les QCM".</p>}
-          </div>
+          {typeGeneral === 'kholle' ? (
+            <p className="field-hint">Ce QCM sera automatiquement visible pendant le créneau de kholle choisi ci-dessus.</p>
+          ) : (
+            <div className="field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={publierMaintenant} onChange={(e) => setPublierMaintenant(e.target.checked)} style={{ width: 'auto' }} />
+                Publier immédiatement
+              </label>
+              {!publierMaintenant && <p className="field-hint">Le QCM sera enregistré en brouillon — invisible des étudiants tant que tu ne le publies pas depuis "Gérer les QCM".</p>}
+            </div>
+          )}
 
           {message && <div className="error-msg">{message}</div>}
 
@@ -442,7 +450,10 @@ export default function CreationQcm() {
           <div className="recap-info-item"><span>Nom</span><span>{titre}</span></div>
           <div className="recap-info-item"><span>Matière</span><span>{matieres.find((m) => m.id === matiereId)?.nom}</span></div>
           <div className="recap-info-item"><span>Type</span><span>{TYPES_QCM.find((t) => t.val === typeGeneral)?.titre}</span></div>
-          <div className="recap-info-item"><span>Statut</span><span>{publierMaintenant ? 'Publication immédiate' : 'Brouillon'}</span></div>
+          <div className="recap-info-item">
+            <span>Statut</span>
+            <span>{typeGeneral === 'kholle' ? 'Visible automatiquement pendant le créneau' : (publierMaintenant ? 'Publication immédiate' : 'Brouillon')}</span>
+          </div>
         </div>
 
         {incompletes.length > 0 && (

@@ -25,6 +25,7 @@ export default function GestionQcm() {
   const [filtreType, setFiltreType] = useState('tous');
   const [matiereDeplacement, setMatiereDeplacement] = useState('');
   const [admins, setAdmins] = useState([]);
+  const [menuActionsOuvert, setMenuActionsOuvert] = useState(null);
   const navigate = useNavigate();
 
   // Matières & cours
@@ -58,6 +59,14 @@ export default function GestionQcm() {
   }
 
   useEffect(() => { charger(); }, []);
+
+  useEffect(() => {
+    function fermerSiExterieur(e) {
+      if (!e.target.closest('.qmr-actions')) setMenuActionsOuvert(null);
+    }
+    document.addEventListener('mousedown', fermerSiExterieur);
+    return () => document.removeEventListener('mousedown', fermerSiExterieur);
+  }, []);
 
   async function ouvrirHistorique(qcmId) {
     if (historiqueOuvert === qcmId) { setHistoriqueOuvert(null); return; }
@@ -304,19 +313,26 @@ export default function GestionQcm() {
           <span className={`status-tag ${qcm.verifie ? 'status-validated' : 'status-pending'}`}>
             {qcm.verifie ? 'Vérifié' : 'À vérifier'}
           </span>
-          <div className="qmr-actions">
-            <Link to={`/qcm/${qcm.id}/modifier`} className="icon-action" title="Voir / Modifier">👁</Link>
-            {!qcm.publie && (
-              <button className="icon-action verify" title="Publier" onClick={() => publier(qcm)}>📤</button>
+          <div className="qmr-actions" style={{ position: 'relative' }}>
+            <button className="icon-action" title="Actions" onClick={() => setMenuActionsOuvert(menuActionsOuvert === qcm.id ? null : qcm.id)}>⋯</button>
+            {menuActionsOuvert === qcm.id && (
+              <div className="dropdown-menu" style={{ top: '110%', right: 0, minWidth: 210 }}>
+                <Link to={`/qcm/${qcm.id}/modifier`} className="dropdown-item" onClick={() => setMenuActionsOuvert(null)}>👁 Voir / modifier</Link>
+                {!qcm.publie && (
+                  <button className="dropdown-item" onClick={() => { publier(qcm); setMenuActionsOuvert(null); }}>📤 Publier</button>
+                )}
+                {!qcm.verifie && qcm.cree_par !== monId && (
+                  <button className="dropdown-item" onClick={() => { verifier(qcm); setMenuActionsOuvert(null); }}>✓ Valider</button>
+                )}
+                <button className="dropdown-item" onClick={() => { basculerVisibilite(qcm); setMenuActionsOuvert(null); }}>
+                  {qcm.visible ? '🗄 Masquer' : '👁‍🗨 Remontrer'}
+                </button>
+                <button className="dropdown-item" onClick={() => { dupliquer(qcm); setMenuActionsOuvert(null); }}>📋 Dupliquer</button>
+                <button className="dropdown-item" onClick={() => { exporter(qcm); setMenuActionsOuvert(null); }}>⬇️ Exporter en JSON</button>
+                <button className="dropdown-item" onClick={() => { ouvrirHistorique(qcm.id); setMenuActionsOuvert(null); }}>🕒 Historique</button>
+                <button className="dropdown-item" style={{ color: 'var(--error)' }} onClick={() => { supprimer(qcm); setMenuActionsOuvert(null); }}>🗑 Supprimer</button>
+              </div>
             )}
-            {!qcm.verifie && qcm.cree_par !== monId && (
-              <button className="icon-action verify" title="Valider" onClick={() => verifier(qcm)}>✓</button>
-            )}
-            <button className="icon-action" title={qcm.visible ? 'Masquer' : 'Remontrer'} onClick={() => basculerVisibilite(qcm)}>{qcm.visible ? '🗄' : '👁‍🗨'}</button>
-            <button className="icon-action" title="Dupliquer" onClick={() => dupliquer(qcm)}>📋</button>
-            <button className="icon-action" title="Exporter en JSON" onClick={() => exporter(qcm)}>⬇️</button>
-            <button className="icon-action" title="Historique" onClick={() => ouvrirHistorique(qcm.id)}>🕒</button>
-            <button className="icon-action danger" title="Supprimer" onClick={() => supprimer(qcm)}>🗑</button>
           </div>
         </div>
 
@@ -493,18 +509,6 @@ export default function GestionQcm() {
           </div>
         </div>
       )}
-
-      <div className="icon-legend">
-        <span>👁 Voir / modifier</span>
-        <span>📤 Publier</span>
-        <span>✓ Valider</span>
-        <span>🗄 Masquer</span>
-        <span>👁‍🗨 Remontrer</span>
-        <span>📋 Dupliquer</span>
-        <span>⬇️ Exporter en JSON</span>
-        <span>🕒 Historique</span>
-        <span>🗑 Supprimer</span>
-      </div>
 
       <div className="qcm-manage-list">
         {filtre === 'masques' ? (

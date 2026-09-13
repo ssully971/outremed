@@ -24,13 +24,13 @@ function ModalPrompt({ prompt, onFermer }) {
           existant à retranscrire ou le(s) cours à partir duquel générer les questions. Colle ensuite sa réponse JSON ci-dessous.
           Le nombre de questions, d'items et les cours ont déjà été pré-remplis d'après l'étape précédente — vérifie-les avant de copier.
         </p>
+        <button type="button" className="btn btn-outline" style={{ width: '100%', marginBottom: 12, flexShrink: 0 }} onClick={() => copier(prompt, setCopiePrompt)}>
+          {copiePrompt ? '✓ Copié' : '📋 Copier le prompt'}
+        </button>
         <div style={{ overflowY: 'auto' }}>
           <pre style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 16, fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
             {prompt}
           </pre>
-          <button type="button" className="btn btn-outline" style={{ width: '100%', marginTop: 12 }} onClick={() => copier(prompt, setCopiePrompt)}>
-            {copiePrompt ? '✓ Copié' : '📋 Copier le prompt'}
-          </button>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 22, marginBottom: 8 }}>Format JSON attendu (rappel) :</p>
           <pre style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 16, fontSize: '0.78rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
