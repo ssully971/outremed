@@ -12,7 +12,6 @@ export default function Navbar() {
   const [forumActif, setForumActif] = useState(true);
   const [planningActif, setPlanningActif] = useState(true);
   const [classementActif, setClassementActif] = useState(true);
-  const [carnetErreursActif, setCarnetErreursActif] = useState(true);
   const [mesStatsActif, setMesStatsActif] = useState(true);
   const [modeSite, setModeSite] = useState('normal');
   const navigate = useNavigate();
@@ -47,14 +46,13 @@ export default function Navbar() {
       }
 
       const { data: params } = await supabase.from('parametres').select('cle, valeur').in('cle', [
-        'forum_actif', 'planning_actif', 'classement_actif', 'carnet_erreurs_actif', 'mes_stats_actif', 'mode_site',
+        'forum_actif', 'planning_actif', 'classement_actif', 'mes_stats_actif', 'mode_site',
       ]);
       const map = {};
       (params || []).forEach((p) => { map[p.cle] = p.valeur; });
       setForumActif(map.forum_actif !== 'false');
       setPlanningActif(map.planning_actif !== 'false');
       setClassementActif(map.classement_actif !== 'false');
-      setCarnetErreursActif(map.carnet_erreurs_actif !== 'false');
       setMesStatsActif(map.mes_stats_actif !== 'false');
       setModeSite(map.mode_site || 'normal');
     }
@@ -105,7 +103,6 @@ export default function Navbar() {
           {!estEtudiantAnnale && (
             <>
               <Link to="/resultats" className={lienClasse('/resultats')}>Résultats</Link>
-              {(carnetErreursActif || estProprietaire) && <Link to="/carnet-erreurs" className={lienClasse('/carnet-erreurs')}>Carnet{!carnetErreursActif && ' 🔒'}</Link>}
               {(mesStatsActif || estProprietaire) && <Link to="/mes-stats" className={lienClasse('/mes-stats')}>Mes stats{!mesStatsActif && ' 🔒'}</Link>}
             </>
           )}

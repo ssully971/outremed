@@ -11,6 +11,7 @@ export default function ListeQcm() {
   const [recherche, setRecherche] = useState('');
   const [etendues, setEtendues] = useState({});
   const [semaineKholleActuelle, setSemaineKholleActuelle] = useState(null);
+  const [kholleActive, setKholleActive] = useState(false);
   const [qcmsKholleDetail, setQcmsKholleDetail] = useState([]);
   const [estEtudiantAnnale, setEstEtudiantAnnale] = useState(false);
   const navigate = useNavigate();
@@ -34,16 +35,23 @@ export default function ListeQcm() {
     setQcms(listeQcms || []);
     setAttempts(mesAttempts || []);
 
-    const { data: semaines } = await supabase.from('semaines_kholle').select('*').order('date_samedi', { ascending: false }).limit(1);
-    if (semaines && semaines.length > 0 && new Date(semaines[0].fin) > new Date()) {
-      setSemaineKholleActuelle(semaines[0]);
-      const { data: qcmsSemaine } = await supabase.from('qcms').select('id, titre, matiere_id, nb_questions').eq('semaine_kholle_id', semaines[0].id);
-      const detail = (qcmsSemaine || []).map((q) => {
-        const tentative = (mesAttempts || []).find((a) => a.qcm_id === q.id);
-        const info = (mats || []).find((m) => m.id === q.matiere_id) || {};
-        return { titre: q.titre, matiere: info.nom || 'Autre', couleur: info.couleur || '#FF3EB5', qcmId: q.id, fait: !!tentative, score: tentative?.score, nb_questions: q.nb_questions };
-      });
-      setQcmsKholleDetail(detail);
+    const { data: semainesAVenir } = await supabase.from('semaines_kholle').select('*').gte('fin', new Date().toISOString()).order('debut', { ascending: true }).limit(5);
+    const semaineEnCours = (semainesAVenir || []).find((s) => new Date(s.debut) <= new Date());
+    const semainePertinente = semaineEnCours || (semainesAVenir || [])[0] || null;
+
+    if (semainePertinente) {
+      setSemaineKholleActuelle(semainePertinente);
+      setKholleActive(!!semaineEnCours);
+
+      if (semaineEnCours) {
+        const { data: qcmsSemaine } = await supabase.from('qcms').select('id, titre, matiere_id, nb_questions').eq('semaine_kholle_id', semainePertinente.id);
+        const detail = (qcmsSemaine || []).map((q) => {
+          const tentative = (mesAttempts || []).find((a) => a.qcm_id === q.id);
+          const info = (mats || []).find((m) => m.id === q.matiere_id) || {};
+          return { titre: q.titre, matiere: info.nom || 'Autre', couleur: info.couleur || '#FF3EB5', qcmId: q.id, fait: !!tentative, score: tentative?.score, nb_questions: q.nb_questions };
+        });
+        setQcmsKholleDetail(detail);
+      }
     }
   }
 
@@ -72,11 +80,13 @@ export default function ListeQcm() {
 
   function decompteKholle() {
     if (!semaineKholleActuelle) return '';
-    const diffMs = new Date(semaineKholleActuelle.fin) - new Date();
+    const cible = kholleActive ? semaineKholleActuelle.fin : semaineKholleActuelle.debut;
+    const diffMs = new Date(cible) - new Date();
     if (diffMs <= 0) return 'Fermée';
     const jours = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     const heures = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    return jours > 0 ? `Ferme dans ${jours}j ${heures}h` : `Ferme dans ${heures}h`;
+    const verbe = kholleActive ? 'Ferme' : 'Ouvre';
+    return jours > 0 ? `${verbe} dans ${jours}j ${heures}h` : `${verbe} dans ${heures}h`;
   }
 
   const estAdmin = monRole === 'tuteur' || monRole === 'proprietaire';
@@ -148,7 +158,7 @@ export default function ListeQcm() {
       <h1 className="page-title">QCM</h1>
       <p className="page-sub">Retrouve tous les QCM disponibles, par matière.</p>
 
-      {!estEtudiantAnnale && semaineKholleActuelle && (
+      {!estEtudiantAnnale && semaineKholleActuelle && kholleActive && (
         <div className="kholle-banner">
           <div className="kholle-top">
             <div>
@@ -166,6 +176,19 @@ export default function ListeQcm() {
                 <span className="qstatus">{q.fait ? `${q.score}/${q.nb_questions}` : 'à faire'}</span>
               </Link>
             ))}
+          </div>
+        </div>
+      )}
+
+      {!estEtudiantAnnale && semaineKholleActuelle && !kholleActive && (
+        <div className="kholle-banner">
+          <div className="kholle-top">
+            <div>
+              <span className="tag">Kholle</span>
+              <h3>Prochaine kholle</h3>
+              <p className="meta-info" style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Pas encore ouverte</p>
+            </div>
+            <span className="countdown">{decompteKholle()}</span>
           </div>
         </div>
       )}

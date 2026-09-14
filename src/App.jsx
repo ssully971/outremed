@@ -7,7 +7,6 @@ import CreationQcm from './pages/CreationQcm';
 import ListeQcm from './pages/ListeQcm';
 import QcmDetail from './pages/QcmDetail';
 import Resultats from './pages/Resultats';
-import CarnetErreurs from './pages/CarnetErreurs';
 import DetailTentative from './pages/DetailTentative';
 import Classement from './pages/Classement';
 import FicheEtudiant from './pages/FicheEtudiant';
@@ -47,7 +46,6 @@ function App() {
           <Route path="/qcm" element={<ListeQcm />} />
           <Route path="/qcm/:id" element={<QcmDetail />} />
           <Route path="/resultats" element={<Resultats />} />
-          <Route path="/carnet-erreurs" element={<CarnetErreurs />} />
           <Route path="/resultats/:attemptId" element={<DetailTentative />} />
           <Route path="/classement" element={<Classement />} />
           <Route path="/etudiants/:id" element={<FicheEtudiant />} />

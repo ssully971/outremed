@@ -66,12 +66,11 @@ export default function QcmDetail() {
       setMonPseudo(monProfil?.pseudo || '');
 
       const { data: mesTentatives } = await supabase.from('attempts').select('id, score').eq('qcm_id', id).eq('user_id', uid);
-      const aDejaTente = (mesTentatives || []).length > 0;
       if (mesTentatives && mesTentatives.length > 0) {
         setMeilleurScore(Math.max(...mesTentatives.map((t) => Number(t.score))));
       }
 
-      if (estAdmin || aDejaTente) {
+      if (estAdmin) {
         const { data: qs } = await supabase.from('questions').select('*').eq('qcm_id', id).order('ordre');
         const { data: its } = await supabase.from('items_visibles').select('*').in('question_id', (qs || []).map((q) => q.id));
         const questionsAvecItems = (qs || []).map((q) => ({ ...q, items: (its || []).filter((i) => i.question_id === q.id) }));
@@ -503,9 +502,10 @@ export default function QcmDetail() {
 
   // ===== ÉCRAN DE CHOIX DU MODE =====
   if (choixDemande) {
-    const dureeEstimee = qcm.duree_minutes || Math.max(5, Math.round((qcm.nb_questions || questions.length) * 0.75));
+    const dureeEstimee = qcm.duree_minutes || 30;
     return (
       <div className="container" style={{ maxWidth: 700, textAlign: 'center' }}>
+        <Link to="/qcm" className="home-btn" style={{ display: 'inline-flex' }}>← Retour aux QCM</Link>
         <h1 style={{ color: 'var(--accent)', fontSize: '2.4rem', margin: '10px 0 0' }}>{qcm.titre}</h1>
         <p style={{ color: 'var(--text-muted)', margin: '10px 0' }}>
           {qcm.nb_questions} Questions à Choix Multiples · Temps estimé {dureeEstimee} min

@@ -175,10 +175,11 @@ se présente.
 ## Pages principales (src/pages/)
 
 Accueil, Login (page de présentation + connexion), ListeQcm, QcmDetail (passation),
-CreationQcm, EditionQcm, GestionQcm (+ signalements, dupliquer, masquer), Resultats,
-CarnetErreurs, RevisionErreurs, DetailTentative, Classement, Statistiques, Comptes,
-FicheEtudiant, FicheTuteur, Profil (paramètres + site + annonces), Historiques, Forum,
-Planning, MesStats, DefinirMotDePasse.
+CreationQcm, EditionQcm, GestionQcm (+ signalements, dupliquer, masquer, export JSON),
+Resultats (fusion Résultats + Carnet d'erreurs depuis le 2026-09-13 — onglets "Historique"
+/ "Erreurs à revoir" dans une seule page, `CarnetErreurs.jsx` supprimé), RevisionErreurs,
+DetailTentative, Classement, Statistiques, Comptes, FicheEtudiant, FicheTuteur, Profil
+(paramètres + site + annonces), Historiques, Forum, Planning, MesStats, DefinirMotDePasse.
 
 ## Ce qui reste à faire / pistes connues
 
