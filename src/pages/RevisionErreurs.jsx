@@ -62,7 +62,7 @@ export default function RevisionErreurs() {
         <div className="card">
           <h2>Rien à réviser ici</h2>
           <p style={{ color: 'var(--text-muted)' }}>Aucune erreur enregistrée pour cette sélection.</p>
-          <Link to="/carnet-erreurs" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block' }}>Retour au carnet</Link>
+          <Link to="/resultats" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block' }}>Retour au carnet</Link>
         </div>
       </div>
     );
@@ -83,7 +83,7 @@ export default function RevisionErreurs() {
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 20 }}>
             Cette révision n'est pas comptée comme une tentative officielle — c'est juste pour t'entraîner.
           </p>
-          <Link to="/carnet-erreurs" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block' }}>Retour au carnet</Link>
+          <Link to="/resultats" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block' }}>Retour au carnet</Link>
         </div>
       </div>
     );
@@ -95,7 +95,7 @@ export default function RevisionErreurs() {
 
   return (
     <div className="container" style={{ maxWidth: 760 }}>
-      <Link to="/carnet-erreurs" className="home-btn" style={{ display: 'inline-flex', marginBottom: 16 }}>← Carnet d'erreurs</Link>
+      <Link to="/resultats" className="home-btn" style={{ display: 'inline-flex', marginBottom: 16 }}>← Carnet d'erreurs</Link>
 
       <div className="card q-card" style={{ '--progress-width': `${(index / questions.length) * 100}%` }}>
         <div className="question-meta">
@@ -104,6 +104,7 @@ export default function RevisionErreurs() {
         </div>
 
         <div className="question-title">{q.enonce}</div>
+        {q.lien && <img src={q.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 16px', display: 'block' }} />}
 
         {q.items.map((item) => {
           const isSelected = selected.includes(item.id);

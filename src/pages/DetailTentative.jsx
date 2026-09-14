@@ -68,6 +68,7 @@ export default function DetailTentative() {
         </div>
 
         <div className="question-title">{q.enonce}</div>
+        {q.lien && <img src={q.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 16px', display: 'block' }} />}
 
         {q.items.map((item) => {
           const isSelected = q.items_selectionnes.includes(item.id);

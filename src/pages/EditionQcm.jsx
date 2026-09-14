@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { envoyerNotificationGroupe } from '../lib/notifier';
+import ImageEnonceUpload from '../components/ImageEnonceUpload';
 
 const LETTRES = 'ABCDEFGH';
 
@@ -199,8 +200,9 @@ export default function EditionQcm() {
           <textarea
             value={q.enonce}
             onChange={(e) => majQuestion(qIdx, 'enonce', e.target.value)}
-            style={{ width: '100%', minHeight: 60, marginTop: 8, marginBottom: 14 }}
+            style={{ width: '100%', minHeight: 60, marginTop: 8, marginBottom: 8 }}
           />
+          <ImageEnonceUpload questionId={q.id} urlActuelle={q.lien} onChange={(url) => majQuestion(qIdx, 'lien', url)} />
           {q.items.map((it, iIdx) => (
             <div key={it.id} className="item-editor">
               <div className="item-editor-head">
@@ -222,6 +224,7 @@ export default function EditionQcm() {
             <div style={{ marginTop: 14, padding: 16, background: 'var(--bg-panel)', borderRadius: 'var(--radius-md)' }}>
               <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase' }}>Ce que verra l'étudiant</p>
               <h3 style={{ marginTop: 0 }}>{q.enonce}</h3>
+              {q.lien && <img src={q.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 12px' }} />}
               {q.items.map((it) => (
                 <div key={it.id} className="item">
                   <span className="item-letter">{it.lettre}</span>

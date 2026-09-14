@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
   const { data: reponses } = await supabaseAdmin
     .from('attempt_answers')
-    .select('question_id, items_selectionnes, statut, questions(enonce, ordre)')
+    .select('question_id, items_selectionnes, statut, questions(enonce, ordre, lien)')
     .eq('attempt_id', attempt_id);
 
   const questionIds = (reponses || []).map((r) => r.question_id);
@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
     .map((r) => ({
       enonce: r.questions.enonce,
       ordre: r.questions.ordre,
+      lien: r.questions.lien,
       statut: r.statut,
       items_selectionnes: r.items_selectionnes,
       items: (items || []).filter((i) => i.question_id === r.question_id),

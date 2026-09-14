@@ -158,7 +158,7 @@ export default function GestionQcm() {
     if (error) { alert('Erreur : ' + error.message); return; }
 
     for (const q of questionsOriginales || []) {
-      const { data: nouvelleQuestion } = await supabase.from('questions').insert({ qcm_id: copie.id, ordre: q.ordre, enonce: q.enonce }).select().single();
+      const { data: nouvelleQuestion } = await supabase.from('questions').insert({ qcm_id: copie.id, ordre: q.ordre, enonce: q.enonce, lien: q.lien }).select().single();
       const itemsDeCetteQuestion = (itemsOriginaux || []).filter((i) => i.question_id === q.id);
       await supabase.from('items').insert(itemsDeCetteQuestion.map((i) => ({
         question_id: nouvelleQuestion.id, lettre: i.lettre, texte: i.texte, est_correct: i.est_correct, correction: i.correction,

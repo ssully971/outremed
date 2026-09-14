@@ -367,6 +367,7 @@ export default function QcmDetail() {
             <span style={{ color: 'var(--accent)', fontFamily: 'monospace' }}>#{String(qcm.numero).padStart(4, '0')}</span>
           </div>
           <div className="question-title">{q.enonce}</div>
+          {q.lien && <img src={q.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 16px', display: 'block' }} />}
           {q.items.map((item, idx) => (
             <div key={item.id} className={`item locked ${item.est_correct ? 'r-correct' : ''}`}>
               <span className="item-letter">{LETTRES[idx]}</span>
@@ -462,6 +463,7 @@ export default function QcmDetail() {
                 {estOuvert && (
                   <div className="review-body">
                     <div style={{ fontWeight: 700, marginBottom: 15, fontSize: '1.1rem' }}>{d.question.enonce}</div>
+                    {d.question.lien && <img src={d.question.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 15px', display: 'block' }} />}
                     {d.question.items.map((item, idx) => {
                       const selectionne = d.selected.includes(item.id);
                       let cls = 'item';
@@ -552,6 +554,7 @@ export default function QcmDetail() {
           <span style={{ opacity: 0.5 }}>Choix Multiples (QCM)</span>
         </div>
         <div className="question-title">{currentQuestion?.enonce}</div>
+        {currentQuestion?.lien && <img src={currentQuestion.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 16px', display: 'block' }} />}
 
         {currentQuestion?.items.map((item, idx) => {
           const isSelected = selected.includes(item.id);

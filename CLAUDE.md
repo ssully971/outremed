@@ -51,7 +51,19 @@ pattern** pour toute future segmentation de comptes plutôt que de créer un rô
 - `qcms` — `type_qcm` (entrainement/concours_blanc), `is_annale`, `is_kholle`, `numero`,
   `est_prive`, `visible`, `publie`, `verifie`, `semaine_kholle_id`, `kholle_debut/fin`
 - `questions`, `items` — items ont `est_correct`/`correction`, jamais exposés bruts aux
-  étudiants pendant un QCM (voir vue `items_visibles`)
+  étudiants pendant un QCM (voir vue `items_visibles`) ; `items` n'est lisible en direct
+  (RLS) que par tuteur/proprietaire — un étudiant qui a besoin du détail de ses propres
+  réponses (carnet d'erreurs, révision) passe par la fonction serveur `attempt-detail` ou
+  `revision-erreurs`, jamais par une requête directe sur `items`. `questions.lien` (colonne
+  historique, jamais documentée avant le 2026-09-14) sert désormais d'URL vers l'image
+  optionnelle de l'énoncé (stockage Supabase Storage, bucket public `question-images`,
+  policies RLS sur `storage.objects` réservant INSERT/SELECT/DELETE à tuteur/proprietaire —
+  **le SELECT est indispensable même si le bucket est public**, sinon `.remove()` ne trouve
+  rien à supprimer et échoue silencieusement sans erreur). Upload géré par
+  `src/lib/uploadImage.js` (compression canvas côté client, 500 Ko max, redimensionnement
+  itératif) + `src/components/ImageEnonceUpload.jsx`, utilisés uniquement depuis
+  `EditionQcm.jsx` (l'image ne peut être ajoutée qu'une fois la question déjà créée en
+  base — impossible avant publication, à l'étape de saisie de `CreationQcm.jsx`).
 - `attempts`, `attempt_answers` — tentatives et réponses détaillées
 - `semaines_kholle`, `signalements_erreur`, `notifications`
 - `canaux`, `canal_membres`, `canal_dernier_vu`, `messages` — forum

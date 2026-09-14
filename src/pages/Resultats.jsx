@@ -40,7 +40,7 @@ export default function Resultats() {
 
     const { data: att } = await supabase
       .from('attempts')
-      .select('*, qcms(id, titre, type_qcm, is_annale, is_kholle, matiere_id, cours_id), attempt_answers(id, question_id, items_selectionnes, statut, questions(enonce, ordre))')
+      .select('*, qcms(id, titre, type_qcm, is_annale, is_kholle, matiere_id, cours_id), attempt_answers(id, question_id, items_selectionnes, statut, questions(enonce, ordre, lien))')
       .eq('user_id', uid)
       .order('created_at', { ascending: false });
     setAttempts(att || []);
@@ -126,6 +126,7 @@ export default function Resultats() {
       groupes[matiereId][coursId][qcmId].questions.push({
         reponseId: e.id,
         enonce: e.questions.enonce,
+        lien: e.questions.lien,
         ordre: e.questions.ordre,
         statut: e.statut,
         selectionnes: e.items_selectionnes || [],
@@ -314,6 +315,7 @@ export default function Resultats() {
                               {data.questions.map((q, idx) => (
                                 <div key={idx} className="error-question">
                                   <div className="eq-title">Q{q.ordre} — {q.enonce}</div>
+                                  {q.lien && <img src={q.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 14px', display: 'block' }} />}
 
                                   {q.items.map((item, iIdx) => {
                                     const selectionne = q.selectionnes.includes(item.id);

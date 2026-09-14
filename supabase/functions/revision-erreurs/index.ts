@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
 
   const { data: questions } = await supabaseAdmin
     .from('questions')
-    .select('id, enonce, ordre, qcm_id, qcms(titre, matiere_id, cours_id)')
+    .select('id, enonce, ordre, qcm_id, lien, qcms(titre, matiere_id, cours_id)')
     .in('id', questionIds);
 
   let questionsFiltrees = questions || [];
@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
   const resultat = questionsFiltrees.map((q) => ({
     id: q.id,
     enonce: q.enonce,
+    lien: q.lien,
     titreQcm: q.qcms?.titre,
     items: (items || []).filter((i) => i.question_id === q.id),
   }));
