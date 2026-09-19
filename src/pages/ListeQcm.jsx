@@ -14,6 +14,7 @@ export default function ListeQcm() {
   const [kholleActive, setKholleActive] = useState(false);
   const [qcmsKholleDetail, setQcmsKholleDetail] = useState([]);
   const [estEtudiantAnnale, setEstEtudiantAnnale] = useState(false);
+  const [matieresAutorisees, setMatieresAutorisees] = useState(null); // null = pas de restriction (tuteur/proprietaire)
   const navigate = useNavigate();
 
   async function charger() {
@@ -26,6 +27,13 @@ export default function ListeQcm() {
     const annale = moi?.role === 'etudiant' && moi?.categorie_compte === 'annale';
     setEstEtudiantAnnale(annale);
     if (annale) setOngletActif('annale');
+
+    let matieresAutoriseesLocal = null;
+    if (moi?.role === 'etudiant') {
+      const { data: pm } = await supabase.from('profil_matieres').select('matiere_id').eq('profile_id', uid);
+      if (pm && pm.length > 0) matieresAutoriseesLocal = new Set(pm.map((p) => p.matiere_id));
+    }
+    setMatieresAutorisees(matieresAutoriseesLocal);
 
     const { data: mats } = await supabase.from('matieres').select('*').eq('est_prive', false).order('nom');
     const { data: listeQcms } = await supabase.from('qcms').select('*').eq('visible', true).eq('publie', true).eq('est_prive', false);
@@ -44,7 +52,8 @@ export default function ListeQcm() {
       setKholleActive(!!semaineEnCours);
 
       if (semaineEnCours) {
-        const { data: qcmsSemaine } = await supabase.from('qcms').select('id, titre, matiere_id, nb_questions').eq('semaine_kholle_id', semainePertinente.id);
+        const { data: qcmsSemaineBrut } = await supabase.from('qcms').select('id, titre, matiere_id, nb_questions').eq('semaine_kholle_id', semainePertinente.id);
+        const qcmsSemaine = (qcmsSemaineBrut || []).filter((q) => !matieresAutoriseesLocal || matieresAutoriseesLocal.has(q.matiere_id));
         const detail = (qcmsSemaine || []).map((q) => {
           const tentative = (mesAttempts || []).find((a) => a.qcm_id === q.id);
           const info = (mats || []).find((m) => m.id === q.matiere_id) || {};
@@ -93,6 +102,7 @@ export default function ListeQcm() {
 
   const qcmsFiltres = qcms
     .filter((q) => !q.is_kholle)
+    .filter((q) => !matieresAutorisees || !q.matiere_id || matieresAutorisees.has(q.matiere_id))
     .filter((q) => {
       if (ongletActif === 'entrainement') return q.type_qcm === 'entrainement' && !q.is_annale;
       if (ongletActif === 'annale') return q.is_annale;

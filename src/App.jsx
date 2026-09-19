@@ -22,6 +22,8 @@ import EditionQcm from './pages/EditionQcm';
 import RevisionErreurs from './pages/RevisionErreurs';
 import MesStats from './pages/MesStats';
 import FicheTuteur from './pages/FicheTuteur';
+import GestionFilieres from './pages/GestionFilieres';
+import ChoisirFiliere from './pages/ChoisirFiliere';
 import './styles/theme.css';
 
 function Layout() {
@@ -39,6 +41,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/definir-mot-de-passe" element={<DefinirMotDePasse />} />
+        <Route path="/choisir-filiere" element={<ChoisirFiliere />} />
 
         <Route element={<Layout />}>
           <Route path="/accueil" element={<Accueil />} />
@@ -61,6 +64,7 @@ function App() {
           <Route path="/carnet-erreurs/revision" element={<RevisionErreurs />} />
           <Route path="/mes-stats" element={<MesStats />} />
           <Route path="/tuteurs/:id" element={<FicheTuteur />} />
+          <Route path="/filieres" element={<GestionFilieres />} />
         </Route>
       </Routes>
     </BrowserRouter>

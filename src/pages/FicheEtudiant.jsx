@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { envoyerNotification, envoyerNotificationGroupe } from '../lib/notifier';
+import SelecteurFiliere from '../components/SelecteurFiliere';
 
 export default function FicheEtudiant() {
   const { id } = useParams();
@@ -22,6 +23,11 @@ export default function FicheEtudiant() {
   const [filtreMatiereTentative, setFiltreMatiereTentative] = useState('');
   const [triTentative, setTriTentative] = useState('date_desc');
   const [filtreMatiereErreur, setFiltreMatiereErreur] = useState('');
+  const [modalites, setModalites] = useState([]);
+  const [sousFilieres, setSousFilieres] = useState([]);
+  const [profilSousFilieres, setProfilSousFilieres] = useState([]);
+  const [profilMatieres, setProfilMatieres] = useState([]);
+  const [editionFiliereOuverte, setEditionFiliereOuverte] = useState(false);
   const navigate = useNavigate();
 
   async function charger() {
@@ -44,6 +50,15 @@ export default function FicheEtudiant() {
 
     const { data: mats } = await supabase.from('matieres').select('*');
     setMatieres(mats || []);
+
+    const { data: mods } = await supabase.from('modalites').select('*');
+    setModalites(mods || []);
+    const { data: sf } = await supabase.from('sous_filieres').select('*');
+    setSousFilieres(sf || []);
+    const { data: psf } = await supabase.from('profil_sous_filieres').select('*').eq('profile_id', id);
+    setProfilSousFilieres(psf || []);
+    const { data: pm } = await supabase.from('profil_matieres').select('*').eq('profile_id', id);
+    setProfilMatieres(pm || []);
 
     const attemptIds = (att || []).map((a) => a.id);
     let nbErr = 0;
@@ -133,6 +148,11 @@ export default function FicheEtudiant() {
       effectue_par: session.session.user.id,
       details: `${etudiant.pseudo} → ${nouvelleCategorie === 'annale' ? 'étudiant annale' : 'étudiant normal'}`,
     });
+    charger();
+  }
+
+  async function basculerCompteClassement(matiereId, valeurActuelle) {
+    await supabase.from('profil_matieres').update({ compte_classement: !valeurActuelle }).eq('profile_id', id).eq('matiere_id', matiereId);
     charger();
   }
 
@@ -372,6 +392,55 @@ export default function FicheEtudiant() {
           )}
         </div>
       )}
+
+      <div className="settings-card">
+        <h3>Filière</h3>
+        {editionFiliereOuverte ? (
+          <SelecteurFiliere
+            profileId={id}
+            avertissementIrreversible={false}
+            valeurInitiale={{
+              modaliteId: etudiant.modalite_id,
+              sousFiliereIds: profilSousFilieres.map((p) => p.sous_filiere_id),
+              matieresFacultativesIds: profilMatieres.filter((p) => p.statut === 'facultative').map((p) => p.matiere_id),
+            }}
+            onApplique={() => { setEditionFiliereOuverte(false); charger(); }}
+            onAnnuler={() => setEditionFiliereOuverte(false)}
+          />
+        ) : (
+          <>
+            <div className="recap-info-list">
+              <div className="recap-info-item"><span>Modalité</span><span>{modalites.find((m) => m.id === etudiant.modalite_id)?.nom || 'Non renseignée'}</span></div>
+              <div className="recap-info-item">
+                <span>Sous-filière(s)</span>
+                <span>{profilSousFilieres.map((p) => sousFilieres.find((s) => s.id === p.sous_filiere_id)?.nom).filter(Boolean).join(', ') || '—'}</span>
+              </div>
+            </div>
+
+            {profilMatieres.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                {profilMatieres.map((p) => {
+                  const nomMat = matieres.find((m) => m.id === p.matiere_id)?.nom || '—';
+                  return (
+                    <div key={p.matiere_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ flex: 1 }}>{nomMat}</span>
+                      <span className={`status-tag ${p.statut === 'obligatoire' ? 'status-validated' : 'status-pending'}`}>{p.statut}</span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        <input type="checkbox" checked={p.compte_classement} onChange={() => basculerCompteClassement(p.matiere_id, p.compte_classement)} />
+                        Compte pour le classement
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <button className="btn btn-outline btn-sm" style={{ marginTop: 16 }} onClick={() => setEditionFiliereOuverte(true)}>
+              {etudiant.modalite_id ? 'Modifier la filière' : 'Définir la filière'}
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="settings-card">
         <h3>Gestion du compte</h3>

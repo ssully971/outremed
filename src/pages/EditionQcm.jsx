@@ -22,6 +22,7 @@ export default function EditionQcm() {
   const [monId, setMonId] = useState(null);
   const [monPseudo, setMonPseudo] = useState('');
   const [navOuverte, setNavOuverte] = useState(false);
+  const [mode, setMode] = useState('edition');
 
   async function charger() {
     const { data: session } = await supabase.auth.getSession();
@@ -96,6 +97,10 @@ export default function EditionQcm() {
   }
 
   async function enregistrer() {
+    if (!/^\d{4}-S[12]$/.test(qcm.semestre || '')) {
+      setMessage('Erreur : le semestre doit être au format AAAA-S1 ou AAAA-S2 (ex : 2026-S1).');
+      return;
+    }
     setEnregistrement(true);
 
     await supabase.from('qcms').update({
@@ -109,7 +114,7 @@ export default function EditionQcm() {
     }).eq('id', id);
 
     for (const q of questions) {
-      await supabase.from('questions').update({ enonce: q.enonce }).eq('id', q.id);
+      await supabase.from('questions').update({ enonce: q.enonce, lien: q.lien || null }).eq('id', q.id);
       for (const it of q.items) {
         await supabase.from('items').update({
           texte: it.texte, est_correct: it.est_correct, correction: it.correction,
@@ -140,6 +145,42 @@ export default function EditionQcm() {
 
       <h1 className="page-title" style={{ marginTop: 12 }}>Modifier le QCM</h1>
 
+      <div className="mode-selector" style={{ margin: '0 0 24px' }}>
+        <div className={`mode-card ${mode === 'edition' ? 'selected' : ''}`} onClick={() => setMode('edition')}>
+          <div className="mode-title">✏️ Modifier</div>
+          <div className="mode-desc">Éditer le contenu question par question.</div>
+        </div>
+        <div className={`mode-card ${mode === 'apercu' ? 'selected' : ''}`} onClick={() => setMode('apercu')}>
+          <div className="mode-title">👁 Aperçu</div>
+          <div className="mode-desc">Défilement continu, exactement comme le verrait un étudiant, réponses affichées.</div>
+        </div>
+      </div>
+
+      {mode === 'apercu' ? (
+        <>
+          {questions.map((q, qIdx) => (
+            <div key={q.id} className="card" style={{ marginBottom: 16 }}>
+              <strong>Question {qIdx + 1}</strong>
+              <div className="question-title" style={{ marginTop: 8 }}>{q.enonce}</div>
+              {q.lien && <img src={q.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 16px', display: 'block' }} />}
+              {q.items.map((it, iIdx) => (
+                <div key={it.id} className={`item locked ${it.est_correct ? 'r-correct' : ''}`}>
+                  <span className="item-letter">{it.lettre || LETTRES[iIdx]}</span>
+                  <span className="item-text">{it.texte}</span>
+                </div>
+              ))}
+              <div className="feedback-block" style={{ marginTop: 12 }}>
+                {q.items.map((it, iIdx) => (
+                  <div key={it.id} className="expl-item" style={{ marginBottom: 6 }}>
+                    <strong style={{ color: it.est_correct ? 'var(--success)' : 'var(--error)' }}>{it.lettre || LETTRES[iIdx]}. {it.est_correct ? 'Vrai.' : 'Faux.'}</strong> {it.correction}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </>
+      ) : (
+      <>
       <div className="settings-card">
         <div className="field">
           <label>Titre</label>
@@ -172,8 +213,6 @@ export default function EditionQcm() {
             Ce QCM alimente un classement
           </label>
         </div>
-
-        <p className="field-hint" style={{ marginTop: 16 }}>Le type de QCM ne peut pas être changé une fois créé — supprime et recrée si besoin.</p>
       </div>
 
       <div className="nav-trigger-row">
@@ -202,7 +241,7 @@ export default function EditionQcm() {
             onChange={(e) => majQuestion(qIdx, 'enonce', e.target.value)}
             style={{ width: '100%', minHeight: 60, marginTop: 8, marginBottom: 8 }}
           />
-          <ImageEnonceUpload questionId={q.id} urlActuelle={q.lien} onChange={(url) => majQuestion(qIdx, 'lien', url)} />
+          <ImageEnonceUpload identifiant={q.id} urlActuelle={q.lien} onChange={(url) => majQuestion(qIdx, 'lien', url)} />
           {q.items.map((it, iIdx) => (
             <div key={it.id} className="item-editor">
               <div className="item-editor-head">
@@ -236,7 +275,7 @@ export default function EditionQcm() {
         </div>
       ))}
 
-      {message && <div className="error-msg" style={{ color: 'var(--success)' }}>{message}</div>}
+      {message && <div className="error-msg" style={{ color: message.startsWith('Erreur') ? 'var(--error)' : 'var(--success)' }}>{message}</div>}
 
       <button className="btn btn-primary" style={{ width: '100%' }} onClick={enregistrer} disabled={enregistrement}>
         {enregistrement ? 'Enregistrement...' : 'Enregistrer les modifications'}
@@ -258,6 +297,8 @@ export default function EditionQcm() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

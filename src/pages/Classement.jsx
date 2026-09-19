@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
-import { envoyerNotificationGroupe } from '../lib/notifier';
 
 export default function Classement() {
   const [onglet, setOnglet] = useState('kholle');
@@ -23,11 +22,17 @@ export default function Classement() {
   const [classementConcours, setClassementConcours] = useState({});
   const [concoursOuvert, setConcoursOuvert] = useState(null);
 
-  const [modifHoraireOuvert, setModifHoraireOuvert] = useState(false);
-  const [nouvelleDate, setNouvelleDate] = useState('');
-  const [nouveauDebut, setNouveauDebut] = useState('');
-  const [nouveauFin, setNouveauFin] = useState('');
-  const [erreurHoraire, setErreurHoraire] = useState('');
+  const [modalites, setModalites] = useState([]);
+  const [sousFilieres, setSousFilieres] = useState([]);
+  const [sousFiliereMatieres, setSousFiliereMatieres] = useState([]);
+  const [profilSousFilieresTous, setProfilSousFilieresTous] = useState([]);
+  const [profilMatieresTous, setProfilMatieresTous] = useState([]);
+  const [exclusions, setExclusions] = useState([]);
+  const [modaliteFiltre, setModaliteFiltre] = useState(null);
+  const [sousFiliereActive, setSousFiliereActive] = useState(null);
+  const [panneauAdminOuvert, setPanneauAdminOuvert] = useState(false);
+  const [porteeAdmin, setPorteeAdmin] = useState(null); // { type: 'semaine'|'concours', id }
+  const [selectionEtudiantsAdmin, setSelectionEtudiantsAdmin] = useState([]);
 
   const navigate = useNavigate();
 
@@ -50,6 +55,24 @@ export default function Classement() {
 
       const { data: etus } = await supabase.from('profils_publics').select('id, pseudo').eq('role', 'etudiant');
       setEtudiants(etus || []);
+
+      const { data: mods } = await supabase.from('modalites').select('*').order('ordre', { ascending: true, nullsFirst: false });
+      setModalites(mods || []);
+      const { data: sf } = await supabase.from('sous_filieres').select('*').order('ordre', { ascending: true, nullsFirst: false });
+      setSousFilieres(sf || []);
+      const { data: sfm } = await supabase.from('sous_filiere_matieres').select('*');
+      setSousFiliereMatieres(sfm || []);
+      const { data: psf } = await supabase.from('profil_sous_filieres').select('*');
+      setProfilSousFilieresTous(psf || []);
+      const { data: pm } = await supabase.from('profil_matieres').select('*');
+      setProfilMatieresTous(pm || []);
+      const { data: excl } = await supabase.from('exclusions_classement').select('*');
+      setExclusions(excl || []);
+
+      if (moi?.role === 'etudiant') {
+        const mesSousFilieres = (psf || []).filter((p) => p.profile_id === moi.id);
+        if (mesSousFilieres.length > 0) setSousFiliereActive(mesSousFilieres[0].sous_filiere_id);
+      }
 
       const { data: sem } = await supabase.from('semaines_kholle').select('*').order('date_samedi', { ascending: false });
       setSemaines(sem || []);
@@ -94,16 +117,62 @@ export default function Classement() {
     return matieres.find((m) => m.id === id)?.nom || '—';
   }
 
-  function calculerClassements(qcmsGroupe, attemptsGroupe) {
+  // Statut d'une matière pour la sous-filière actuellement affichée (obligatoire/facultative/null
+  // = ne concerne pas). Base du cloisonnement des classements par sous-filière (item 20.5).
+  function statutMatierePourSousFiliere(matiereId) {
+    if (!sousFiliereActive) return null;
+    return sousFiliereMatieres.find((sfm) => sfm.sous_filiere_id === sousFiliereActive && sfm.matiere_id === matiereId)?.statut || null;
+  }
+
+  // avecFacultatives=true : matières obligatoires + facultatives (classements par matière/par
+  // kholle, qui ont chacun leur propre classement). avecFacultatives=false : uniquement les
+  // obligatoires (alimente le classement général, qui ne doit jamais compter une facultative).
+  function filtrerQcmsPourSousFiliere(qcmsGroupe, avecFacultatives) {
+    return qcmsGroupe.filter((q) => {
+      const statut = statutMatierePourSousFiliere(q.matiere_id);
+      if (!statut) return false;
+      return avecFacultatives ? true : statut === 'obligatoire';
+    });
+  }
+
+  // Exclut les tentatives couvertes par une exclusion ponctuelle (item 24.1) ou par un
+  // profil_matieres.compte_classement=false (exclusion permanente d'une matière pour cet
+  // étudiant, item 20.4).
+  function filtrerAttemptsPourClassement(attemptsGroupe, qcmsGroupeFiltre) {
+    const qcmById = {};
+    qcmsGroupeFiltre.forEach((q) => { qcmById[q.id] = q; });
+    return attemptsGroupe.filter((a) => {
+      const qcm = qcmById[a.qcm_id];
+      if (!qcm) return false;
+      const exclu = exclusions.some((ex) => ex.user_id === a.user_id && (
+        ex.qcm_id === a.qcm_id || (qcm.semaine_kholle_id && ex.semaine_kholle_id === qcm.semaine_kholle_id)
+      ));
+      if (exclu) return false;
+      const pm = profilMatieresTous.find((p) => p.profile_id === a.user_id && p.matiere_id === qcm.matiere_id);
+      if (pm && pm.compte_classement === false) return false;
+      return true;
+    });
+  }
+
+  function calculerClassements(qcmsGroupe, attemptsGroupe, etudiantsGroupe) {
     const parMatiere = {};
-    qcmsGroupe.forEach((q) => {
-      const nom = nomMatiere(q.matiere_id);
-      if (!parMatiere[nom]) parMatiere[nom] = [];
-      const attemptsCeQcm = attemptsGroupe.filter((a) => a.qcm_id === q.id).sort((a, b) => b.score - a.score);
-      parMatiere[nom] = attemptsCeQcm.map((a) => ({ pseudo: etudiants.find((e) => e.id === a.user_id)?.pseudo || '—', score: a.score }));
+    const matiereIds = [...new Set(qcmsGroupe.map((q) => q.matiere_id))];
+    matiereIds.forEach((matId) => {
+      const nom = nomMatiere(matId);
+      const qcmsDeCetteMatiere = qcmsGroupe.filter((q) => q.matiere_id === matId);
+      parMatiere[nom] = etudiantsGroupe
+        .map((e) => {
+          const scores = qcmsDeCetteMatiere.map((q) => attemptsGroupe.find((a) => a.qcm_id === q.id && a.user_id === e.id));
+          const aFait = scores.some((s) => s);
+          const moyenne = scores.reduce((s, a) => s + (a ? Number(a.score) : 0), 0) / qcmsDeCetteMatiere.length;
+          return { pseudo: e.pseudo, score: moyenne, aFait };
+        })
+        .filter((r) => r.aFait)
+        .sort((a, b) => b.score - a.score)
+        .map((r) => ({ pseudo: r.pseudo, score: r.score.toFixed(2) }));
     });
 
-    const general = etudiants.map((e) => {
+    const general = etudiantsGroupe.map((e) => {
       const scoresEtudiant = qcmsGroupe.map((q) => {
         const tentative = attemptsGroupe.find((a) => a.qcm_id === q.id && a.user_id === e.id);
         return tentative ? Number(tentative.score) : 0;
@@ -120,49 +189,80 @@ export default function Classement() {
     setConcoursOuvert(qcmId);
     if (!classementConcours[qcmId]) {
       const { data } = await supabase.from('resultats_classement').select('*').eq('qcm_id', qcmId).order('score', { ascending: false });
-      setClassementConcours((prev) => ({ ...prev, [qcmId]: data || [] }));
+      const qcm = concoursBlancs.find((c) => c.id === qcmId);
+      const idsAutorises = new Set(etudiantsSousFiliere.map((e) => e.id));
+      const filtres = (data || []).filter((a) => {
+        if (!idsAutorises.has(a.user_id)) return false;
+        const exclu = exclusions.some((ex) => ex.user_id === a.user_id && ex.qcm_id === qcmId);
+        if (exclu) return false;
+        const pm = profilMatieresTous.find((p) => p.profile_id === a.user_id && p.matiere_id === qcm?.matiere_id);
+        if (pm && pm.compte_classement === false) return false;
+        return true;
+      });
+      setClassementConcours((prev) => ({ ...prev, [qcmId]: filtres }));
     }
   }
 
-  async function enregistrerNouvelHoraire() {
-    if (!semaineActuelle || !nouvelleDate || !nouveauDebut || !nouveauFin) return;
-    setErreurHoraire('');
-    if (new Date(nouveauFin) <= new Date(nouveauDebut)) { setErreurHoraire('La fin doit être après le début.'); return; }
+  async function rechargerExclusions() {
+    const { data: excl } = await supabase.from('exclusions_classement').select('*');
+    setExclusions(excl || []);
+  }
 
-    const { error } = await supabase.from('semaines_kholle').update({
-      date_samedi: nouvelleDate,
-      debut: new Date(nouveauDebut).toISOString(),
-      fin: new Date(nouveauFin).toISOString(),
-      modifie_par: monProfil.id,
-      modifie_le: new Date().toISOString(),
-    }).eq('id', semaineActuelle.id);
+  async function reinitialiserClassement() {
+    if (!porteeAdmin) return;
+    const libelle = porteeAdmin.type === 'semaine' ? 'cette semaine de kholle' : 'ce concours blanc';
+    if (!confirm(`Réinitialiser le classement pour ${libelle} ? Toutes les exclusions manuelles existantes pour cette portée seront levées.`)) return;
+    const colonne = porteeAdmin.type === 'semaine' ? 'semaine_kholle_id' : 'qcm_id';
+    await supabase.from('exclusions_classement').delete().eq(colonne, porteeAdmin.id);
+    setClassementConcours({});
+    await rechargerExclusions();
+  }
 
-    if (error) {
-      setErreurHoraire(error.code === '23505' ? 'Une kholle est déjà programmée à cette date.' : 'Erreur : ' + error.message);
-      return;
-    }
+  async function exclureSelectionDuClassement() {
+    if (!porteeAdmin || selectionEtudiantsAdmin.length === 0) return;
+    const lignes = selectionEtudiantsAdmin.map((userId) => ({
+      user_id: userId,
+      qcm_id: porteeAdmin.type === 'concours' ? porteeAdmin.id : null,
+      semaine_kholle_id: porteeAdmin.type === 'semaine' ? porteeAdmin.id : null,
+      cree_par: monProfil.id,
+    }));
+    await supabase.from('exclusions_classement').insert(lignes);
+    setSelectionEtudiantsAdmin([]);
+    setClassementConcours({});
+    await rechargerExclusions();
+  }
 
-    const dateFormatee = new Date(nouvelleDate).toLocaleDateString('fr-FR');
-
-    const { data: autresAdmins } = await supabase.from('profiles').select('id').in('role', ['tuteur', 'proprietaire']).neq('id', monProfil.id);
-    if (autresAdmins && autresAdmins.length > 0) {
-      await envoyerNotificationGroupe(autresAdmins.map((a) => a.id), 'compte_admin', `L'horaire de la kholle du ${dateFormatee} a été modifié.`, '/classement');
-    }
-
-    if (etudiants.length > 0) {
-      await envoyerNotificationGroupe(etudiants.map((e) => e.id), 'echeance', `L'horaire de la kholle du ${dateFormatee} a changé.`, '/classement');
-    }
-
-    setModifHoraireOuvert(false);
-    window.location.reload();
+  async function reinclure(exclusionId) {
+    await supabase.from('exclusions_classement').delete().eq('id', exclusionId);
+    setClassementConcours({});
+    await rechargerExclusions();
   }
 
   if (!monProfil) return <div style={{ padding: 40 }}>Chargement...</div>;
 
-  const peutCorrigerHoraire = monProfil.role === 'tuteur' || monProfil.role === 'proprietaire';
+  const estAdminClassement = monProfil.role === 'tuteur' || monProfil.role === 'proprietaire';
   const semaineAArafficher = semaineAffichee || semaineActuelle;
-  const { parMatiere: parMatiereKholle, general: generalKholle } = calculerClassements(qcmsSemaine, attemptsSemaine);
-  const { parMatiere: parMatiereSemestre, general: generalSemestre } = calculerClassements(qcmsSemestre, attemptsSemestre);
+
+  const mesSousFilieresIds = profilSousFilieresTous.filter((p) => p.profile_id === monProfil.id).map((p) => p.sous_filiere_id);
+  const sousFilieresChoix = estAdminClassement
+    ? sousFilieres.filter((s) => modaliteFiltre && s.modalite_id === modaliteFiltre)
+    : sousFilieres.filter((s) => mesSousFilieresIds.includes(s.id));
+
+  const etudiantsSousFiliere = sousFiliereActive
+    ? etudiants.filter((e) => profilSousFilieresTous.some((p) => p.profile_id === e.id && p.sous_filiere_id === sousFiliereActive))
+    : [];
+
+  const qcmsSemaineAvecFac = sousFiliereActive ? filtrerQcmsPourSousFiliere(qcmsSemaine, true) : [];
+  const qcmsSemaineObligatoires = sousFiliereActive ? filtrerQcmsPourSousFiliere(qcmsSemaine, false) : [];
+  const { parMatiere: parMatiereKholle } = calculerClassements(qcmsSemaineAvecFac, filtrerAttemptsPourClassement(attemptsSemaine, qcmsSemaineAvecFac), etudiantsSousFiliere);
+  const { general: generalKholle } = calculerClassements(qcmsSemaineObligatoires, filtrerAttemptsPourClassement(attemptsSemaine, qcmsSemaineObligatoires), etudiantsSousFiliere);
+
+  const qcmsSemestreAvecFac = sousFiliereActive ? filtrerQcmsPourSousFiliere(qcmsSemestre, true) : [];
+  const qcmsSemestreObligatoires = sousFiliereActive ? filtrerQcmsPourSousFiliere(qcmsSemestre, false) : [];
+  const { parMatiere: parMatiereSemestre } = calculerClassements(qcmsSemestreAvecFac, filtrerAttemptsPourClassement(attemptsSemestre, qcmsSemestreAvecFac), etudiantsSousFiliere);
+  const { general: generalSemestre } = calculerClassements(qcmsSemestreObligatoires, filtrerAttemptsPourClassement(attemptsSemestre, qcmsSemestreObligatoires), etudiantsSousFiliere);
+
+  const concoursBlancsFiltres = sousFiliereActive ? concoursBlancs.filter((qcm) => !!statutMatierePourSousFiliere(qcm.matiere_id)) : [];
 
   function ClassementListe({ liste, cleScore }) {
     return liste.map((item, idx) => (
@@ -187,7 +287,103 @@ export default function Classement() {
         ))}
       </div>
 
-      {onglet === 'kholle' && (
+      {estAdminClassement && (
+        <div className="filter-row">
+          {modalites.map((m) => (
+            <button key={m.id} className={`filter-chip ${modaliteFiltre === m.id ? 'active' : ''}`} onClick={() => { setModaliteFiltre(m.id); setSousFiliereActive(null); }}>{m.nom}</button>
+          ))}
+        </div>
+      )}
+
+      {sousFilieresChoix.length > 0 && (estAdminClassement || sousFilieresChoix.length > 1) && (
+        <div className="filter-row" style={{ marginBottom: 20 }}>
+          {sousFilieresChoix.map((s) => (
+            <button key={s.id} className={`filter-chip ${sousFiliereActive === s.id ? 'active' : ''}`} onClick={() => setSousFiliereActive(s.id)}>{s.nom}</button>
+          ))}
+        </div>
+      )}
+
+      {!sousFiliereActive && (
+        <p style={{ color: 'var(--text-muted)' }}>
+          {estAdminClassement
+            ? (modaliteFiltre ? 'Choisis une sous-filière pour afficher le classement.' : 'Choisis une modalité puis une sous-filière pour afficher le classement.')
+            : "Ta filière n'est pas encore configurée."}
+        </p>
+      )}
+
+      {sousFiliereActive && estAdminClassement && (
+        <div style={{ marginBottom: 20 }}>
+          <button className="btn btn-outline btn-sm" onClick={() => setPanneauAdminOuvert((v) => !v)}>
+            {panneauAdminOuvert ? 'Fermer les outils de classement' : '⚙ Outils de classement (réinitialiser / exclure)'}
+          </button>
+          {panneauAdminOuvert && (
+            <div className="card" style={{ marginTop: 12 }}>
+              <div className="field">
+                <label>Portée</label>
+                <select
+                  value={porteeAdmin ? `${porteeAdmin.type}:${porteeAdmin.id}` : ''}
+                  onChange={(e) => {
+                    const [type, id] = e.target.value.split(':');
+                    setPorteeAdmin(e.target.value ? { type, id } : null);
+                    setSelectionEtudiantsAdmin([]);
+                  }}
+                >
+                  <option value="">— Choisir —</option>
+                  {semaines.map((s) => (
+                    <option key={s.id} value={`semaine:${s.id}`}>Kholle du {new Date(s.date_samedi).toLocaleDateString('fr-FR')}</option>
+                  ))}
+                  {concoursBlancsFiltres.map((c) => (
+                    <option key={c.id} value={`concours:${c.id}`}>{c.titre}</option>
+                  ))}
+                </select>
+              </div>
+
+              {porteeAdmin && (
+                <>
+                  <div className="field">
+                    <label>Exclure des étudiants de cette portée</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
+                      {etudiantsSousFiliere.map((e) => (
+                        <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectionEtudiantsAdmin.includes(e.id)}
+                            onChange={() => setSelectionEtudiantsAdmin((prev) => prev.includes(e.id) ? prev.filter((x) => x !== e.id) : [...prev, e.id])}
+                          />
+                          {e.pseudo}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <button className="btn btn-outline btn-sm" disabled={selectionEtudiantsAdmin.length === 0} onClick={exclureSelectionDuClassement}>
+                      Exclure la sélection
+                    </button>
+                    <button className="btn btn-danger-outline btn-sm" onClick={reinitialiserClassement}>
+                      Réinitialiser cette portée (lever toutes les exclusions)
+                    </button>
+                  </div>
+
+                  {exclusions.filter((ex) => (porteeAdmin.type === 'semaine' ? ex.semaine_kholle_id === porteeAdmin.id : ex.qcm_id === porteeAdmin.id)).length > 0 && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>Étudiants actuellement exclus</label>
+                      {exclusions.filter((ex) => (porteeAdmin.type === 'semaine' ? ex.semaine_kholle_id === porteeAdmin.id : ex.qcm_id === porteeAdmin.id)).map((ex) => (
+                        <div key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: '0.85rem' }}>
+                          <span>{etudiants.find((e) => e.id === ex.user_id)?.pseudo || '—'}</span>
+                          <button className="btn btn-ghost btn-sm" onClick={() => reinclure(ex.id)}>Ré-inclure</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {sousFiliereActive && onglet === 'kholle' && (
         <>
           {semaineAArafficher ? (
             <>
@@ -198,43 +394,9 @@ export default function Classement() {
                       Semaine du {new Date(semaineAArafficher.date_samedi).toLocaleDateString('fr-FR')}
                       {semaineAffichee && ' (archive)'}
                     </h3>
-                    <p className="rc-sub" style={{ margin: '4px 0 0' }}>{qcmsSemaine.length} QCM de kholle cette semaine</p>
+                    <p className="rc-sub" style={{ margin: '4px 0 0' }}>{qcmsSemaineAvecFac.length} QCM de kholle cette semaine</p>
                   </div>
-                  {peutCorrigerHoraire && !semaineAffichee && (
-                    <button
-                      className="btn-outline"
-                      onClick={() => {
-                        const ouverture = !modifHoraireOuvert;
-                        setModifHoraireOuvert(ouverture);
-                        setErreurHoraire('');
-                        if (ouverture) setNouvelleDate(semaineActuelle.date_samedi);
-                      }}
-                    >
-                      Reporter / corriger l'horaire
-                    </button>
-                  )}
                 </div>
-
-                {modifHoraireOuvert && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-                    <div className="field">
-                      <label>Date</label>
-                      <input type="date" value={nouvelleDate} onChange={(e) => setNouvelleDate(e.target.value)} />
-                    </div>
-                    <div className="field-row">
-                      <div className="field">
-                        <label>Nouveau début</label>
-                        <input type="datetime-local" value={nouveauDebut} onChange={(e) => setNouveauDebut(e.target.value)} />
-                      </div>
-                      <div className="field">
-                        <label>Nouvelle fin</label>
-                        <input type="datetime-local" value={nouveauFin} onChange={(e) => setNouveauFin(e.target.value)} />
-                      </div>
-                    </div>
-                    {erreurHoraire && <div className="error-msg">{erreurHoraire}</div>}
-                    <button className="btn" onClick={enregistrerNouvelHoraire}>Enregistrer</button>
-                  </div>
-                )}
               </div>
 
               <div className="rank-card">
@@ -255,7 +417,7 @@ export default function Classement() {
         </>
       )}
 
-      {onglet === 'semestre' && (
+      {sousFiliereActive && onglet === 'semestre' && (
         <>
           <p className="semester-rank-note">Semestre actif : <strong style={{ color: 'var(--text-main)' }}>{semestreActif}</strong></p>
           <div className="rank-card">
@@ -271,10 +433,10 @@ export default function Classement() {
         </>
       )}
 
-      {onglet === 'concours' && (
+      {sousFiliereActive && onglet === 'concours' && (
         <>
-          {concoursBlancs.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Aucun concours blanc pour l'instant.</p>}
-          {concoursBlancs.map((qcm) => (
+          {concoursBlancsFiltres.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Aucun concours blanc pour l'instant.</p>}
+          {concoursBlancsFiltres.map((qcm) => (
             <div key={qcm.id}>
               <div className="concours-note" onClick={() => ouvrirConcours(qcm.id)}>
                 <span className="cn-text"><b>{qcm.titre}</b></span>

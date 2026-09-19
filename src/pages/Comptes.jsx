@@ -24,6 +24,11 @@ export default function Comptes() {
   const [filtreStatutEtudiant, setFiltreStatutEtudiant] = useState('tous');
   const [triEtudiant, setTriEtudiant] = useState('pseudo');
   const [filtreCategorie, setFiltreCategorie] = useState('tous');
+  const [modalites, setModalites] = useState([]);
+  const [sousFilieres, setSousFilieres] = useState([]);
+  const [profilSousFilieresParEtudiant, setProfilSousFilieresParEtudiant] = useState({});
+  const [filtreModaliteId, setFiltreModaliteId] = useState('tous');
+  const [filtreSousFiliereId, setFiltreSousFiliereId] = useState('tous');
   const [modeSite, setModeSite] = useState('normal');
   const [categorieCompte, setCategorieCompte] = useState('');
 
@@ -53,6 +58,15 @@ export default function Comptes() {
     if (tuteurRestreint) requeteEtudiants = requeteEtudiants.eq('categorie_compte', 'annale');
     const { data: etus } = await requeteEtudiants;
     setEtudiants(etus || []);
+
+    const { data: mods } = await supabase.from('modalites').select('*').order('ordre', { ascending: true, nullsFirst: false });
+    setModalites(mods || []);
+    const { data: sf } = await supabase.from('sous_filieres').select('*').order('ordre', { ascending: true, nullsFirst: false });
+    setSousFilieres(sf || []);
+    const { data: psf } = await supabase.from('profil_sous_filieres').select('*');
+    const map = {};
+    (psf || []).forEach((p) => { if (!map[p.profile_id]) map[p.profile_id] = []; map[p.profile_id].push(p.sous_filiere_id); });
+    setProfilSousFilieresParEtudiant(map);
 
     const { data: att } = await supabase.from('attempts').select('user_id, score, qcms(nb_questions)');
     const moyennesMap = {};
@@ -203,6 +217,11 @@ export default function Comptes() {
       return true;
     })
     .filter((e) => {
+      if (filtreModaliteId !== 'tous' && e.modalite_id !== filtreModaliteId) return false;
+      if (filtreSousFiliereId !== 'tous' && !(profilSousFilieresParEtudiant[e.id] || []).includes(filtreSousFiliereId)) return false;
+      return true;
+    })
+    .filter((e) => {
       if (filtreStatutEtudiant === 'tous') return true;
       if (filtreStatutEtudiant === 'suspendu') return !e.compte_actif || e.statut_compte === 'suspendu';
       return e.statut_compte === filtreStatutEtudiant && e.compte_actif;
@@ -275,6 +294,24 @@ export default function Comptes() {
               <option value="moyenne">Trier par moyenne</option>
             </select>
           </div>
+
+          {modalites.length > 0 && (
+            <div className="filter-row">
+              <button className={`filter-chip ${filtreModaliteId === 'tous' ? 'active' : ''}`} onClick={() => { setFiltreModaliteId('tous'); setFiltreSousFiliereId('tous'); }}>Toutes modalités</button>
+              {modalites.map((m) => (
+                <button key={m.id} className={`filter-chip ${filtreModaliteId === m.id ? 'active' : ''}`} onClick={() => { setFiltreModaliteId(m.id); setFiltreSousFiliereId('tous'); }}>{m.nom}</button>
+              ))}
+            </div>
+          )}
+
+          {filtreModaliteId !== 'tous' && sousFilieres.some((s) => s.modalite_id === filtreModaliteId) && (
+            <div className="filter-row">
+              <button className={`filter-chip ${filtreSousFiliereId === 'tous' ? 'active' : ''}`} onClick={() => setFiltreSousFiliereId('tous')}>Toutes sous-filières</button>
+              {sousFilieres.filter((s) => s.modalite_id === filtreModaliteId).map((s) => (
+                <button key={s.id} className={`filter-chip ${filtreSousFiliereId === s.id ? 'active' : ''}`} onClick={() => setFiltreSousFiliereId(s.id)}>{s.nom}</button>
+              ))}
+            </div>
+          )}
 
           {etudiantsAffiches.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Aucun étudiant ne correspond.</p>}
           <div className="student-list">

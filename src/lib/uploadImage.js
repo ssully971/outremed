@@ -48,35 +48,33 @@ function cheminDepuisUrl(url) {
   return idx >= 0 ? url.slice(idx + marqueur.length) : null;
 }
 
-export async function uploaderImageQuestion(questionId, fichier, ancienneUrl) {
+// Compresse et envoie l'image dans le bucket Storage, sans toucher à la table `questions` —
+// utilisable aussi bien pour une question déjà en base (EditionQcm) que pour une question
+// encore seulement en mémoire côté client avant publication (CreationQcm, qui n'a pas encore
+// de question_id réel). `identifiant` sert uniquement de préfixe de nom de fichier (question.id
+// réel, ou une clé locale temporaire tant que la question n'est pas créée).
+export async function uploaderImage(identifiant, fichier, ancienneUrl) {
   const blob = await compresserImage(fichier);
   if (!blob) throw new Error("Impossible de traiter cette image.");
   if (blob.size > MAX_IMAGE_BYTES) {
     throw new Error(`Image trop lourde même après compression (max ${Math.round(MAX_IMAGE_BYTES / 1024)} Ko).`);
   }
 
-  const chemin = `${questionId}-${Date.now()}.jpg`;
+  const chemin = `${identifiant}-${Date.now()}.jpg`;
   const { error: erreurUpload } = await supabase.storage.from('question-images').upload(chemin, blob, { contentType: 'image/jpeg', upsert: false });
   if (erreurUpload) throw new Error(erreurUpload.message);
 
+  // Remplacement : l'ancien fichier n'est plus référencé nulle part, on le retire pour ne
+  // pas accumuler des orphelins dans le bucket (limité en taille).
+  if (ancienneUrl) await supprimerImageStockage(ancienneUrl);
+
   const { data: urlData } = supabase.storage.from('question-images').getPublicUrl(chemin);
-  const { error: erreurMaj } = await supabase.from('questions').update({ lien: urlData.publicUrl }).eq('id', questionId);
-  if (erreurMaj) throw new Error(erreurMaj.message);
-
-  // Remplacement : l'ancien fichier n'est plus référencé par aucune question, on le retire
-  // pour ne pas accumuler des orphelins dans le bucket (limité en taille).
-  const ancienChemin = ancienneUrl ? cheminDepuisUrl(ancienneUrl) : null;
-  if (ancienChemin) await supabase.storage.from('question-images').remove([ancienChemin]);
-
   return urlData.publicUrl;
 }
 
-export async function supprimerImageQuestion(questionId, urlActuelle) {
-  const chemin = urlActuelle ? cheminDepuisUrl(urlActuelle) : null;
-  if (chemin) {
-    const { error: erreurSuppression } = await supabase.storage.from('question-images').remove([chemin]);
-    if (erreurSuppression) throw new Error(erreurSuppression.message);
-  }
-  const { error } = await supabase.from('questions').update({ lien: null }).eq('id', questionId);
+export async function supprimerImageStockage(url) {
+  const chemin = url ? cheminDepuisUrl(url) : null;
+  if (!chemin) return;
+  const { error } = await supabase.storage.from('question-images').remove([chemin]);
   if (error) throw new Error(error.message);
 }

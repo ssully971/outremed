@@ -4,9 +4,12 @@ import { supabase } from '../lib/supabaseClient';
 import { envoyerNotificationGroupe } from '../lib/notifier';
 import ImportJsonQcm from '../components/ImportJsonQcm';
 import CreerMatiereCoursModal from '../components/CreerMatiereCoursModal';
+import ImageEnonceUpload from '../components/ImageEnonceUpload';
 
 const ITEM_VIDE = () => ({ texte: '', est_correct: false, correction: '' });
-const QUESTION_VIDE = (nbItems) => ({ enonce: '', items: Array.from({ length: nbItems }, ITEM_VIDE) });
+// cleLocale : identifiant purement client, sans rapport avec l'id réel en base — sert juste
+// de préfixe de nom de fichier pour une image importée avant que la question n'existe en DB.
+const QUESTION_VIDE = (nbItems) => ({ cleLocale: crypto.randomUUID(), enonce: '', lien: null, items: Array.from({ length: nbItems }, ITEM_VIDE) });
 const LETTRES = 'ABCDEFGH';
 
 const TYPES_QCM = [
@@ -86,7 +89,7 @@ export default function CreationQcm() {
     charger();
   }, []);
 
-  const nbFixe = typeGeneral === 'kholle' || typeGeneral === 'concours_blanc' || typeGeneral === 'annale';
+  const nbFixe = typeGeneral === 'kholle' || typeGeneral === 'concours_blanc';
 
   function changerNbQuestions(n) {
     setNbQuestions(n);
@@ -132,6 +135,8 @@ export default function CreationQcm() {
       if (new Date(kholleFinInput) <= new Date(kholleDebutInput)) { setMessage('La fin doit être après le début.'); return; }
     }
     if (typeGeneral === 'annale' && coursAnnaleIds.length === 0) { setMessage('Sélectionne au moins un cours pour cette annale.'); return; }
+    if (!semestre.trim()) { setMessage('Le semestre est obligatoire.'); return; }
+    if (!/^\d{4}-S[12]$/.test(semestre.trim())) { setMessage('Le semestre doit être au format AAAA-S1 ou AAAA-S2 (ex : 2026-S1).'); return; }
     setEtape(2);
   }
 
@@ -154,9 +159,10 @@ export default function CreationQcm() {
   }
 
   function gererImportJson({ questions: questionsImportees, avertissements }) {
-    setNbQuestions(questionsImportees.length);
-    setNbItems(Math.max(...questionsImportees.map((q) => q.items.length)));
-    setQuestions(questionsImportees);
+    const questionsAvecCle = questionsImportees.map((q) => ({ cleLocale: crypto.randomUUID(), lien: null, ...q }));
+    setNbQuestions(questionsAvecCle.length);
+    setNbItems(Math.max(...questionsAvecCle.map((q) => q.items.length)));
+    setQuestions(questionsAvecCle);
     setModeQuestions('manuel');
 
     const base = `✅ ${questionsImportees.length} question(s) importée(s) depuis le JSON.`;
@@ -189,26 +195,21 @@ export default function CreationQcm() {
         kholleDebutFinal = creneau.debut;
         kholleFinFinal = creneau.fin;
       } else {
+        // Toujours créer un nouveau créneau avec l'horaire tapé par le tuteur — on ne
+        // réutilise plus jamais un créneau existant silencieusement (même s'il tombe sur la
+        // même date) : rejoindre un créneau ne se fait que via un choix explicite ci-dessus.
         const dateChoisie = kholleDebutInput.slice(0, 10);
-        const { data: semaineExistante } = await supabase.from('semaines_kholle').select('*').eq('date_samedi', dateChoisie).maybeSingle();
+        const { data: parametre } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
 
-        if (semaineExistante) {
-          semaineKholleId = semaineExistante.id;
-          kholleDebutFinal = semaineExistante.debut;
-          kholleFinFinal = semaineExistante.fin;
-        } else {
-          const { data: parametre } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
+        const { data: nouvelleSemaine, error: erreurSemaine } = await supabase
+          .from('semaines_kholle')
+          .insert({ date_samedi: dateChoisie, debut: new Date(kholleDebutInput).toISOString(), fin: new Date(kholleFinInput).toISOString(), semestre: parametre?.valeur || null, cree_par: userId })
+          .select().single();
 
-          const { data: nouvelleSemaine, error: erreurSemaine } = await supabase
-            .from('semaines_kholle')
-            .insert({ date_samedi: dateChoisie, debut: new Date(kholleDebutInput).toISOString(), fin: new Date(kholleFinInput).toISOString(), semestre: parametre?.valeur || null, cree_par: userId })
-            .select().single();
-
-          if (erreurSemaine) { setMessage('Erreur : ' + erreurSemaine.message); setEnCours(false); return; }
-          semaineKholleId = nouvelleSemaine.id;
-          kholleDebutFinal = nouvelleSemaine.debut;
-          kholleFinFinal = nouvelleSemaine.fin;
-        }
+        if (erreurSemaine) { setMessage('Erreur : ' + erreurSemaine.message); setEnCours(false); return; }
+        semaineKholleId = nouvelleSemaine.id;
+        kholleDebutFinal = nouvelleSemaine.debut;
+        kholleFinFinal = nouvelleSemaine.fin;
       }
     }
 
@@ -228,7 +229,7 @@ export default function CreationQcm() {
     }
 
     for (let i = 0; i < questions.length; i++) {
-      const { data: question } = await supabase.from('questions').insert({ qcm_id: qcm.id, ordre: i + 1, enonce: questions[i].enonce }).select().single();
+      const { data: question } = await supabase.from('questions').insert({ qcm_id: qcm.id, ordre: i + 1, enonce: questions[i].enonce, lien: questions[i].lien || null }).select().single();
       await supabase.from('items').insert(
         questions[i].items.map((it, idx) => ({ question_id: question.id, lettre: LETTRES[idx], texte: it.texte, est_correct: it.est_correct, correction: it.correction }))
       );
@@ -361,7 +362,7 @@ export default function CreationQcm() {
                 <p style={{ margin: '8px 0 0' }}>
                   {creneauKholleChoisi
                     ? 'Ce QCM rejoindra ce créneau existant.'
-                    : "Si une kholle existe déjà pour cette date, ce QCM la rejoindra automatiquement avec son horaire."}
+                    : 'Un nouveau créneau sera créé avec cet horaire, propre à ce QCM — pour rejoindre un créneau existant, sélectionne-le ci-dessus.'}
                 </p>
               </div>
             </div>
@@ -386,7 +387,7 @@ export default function CreationQcm() {
           </div>
 
           <div className="field">
-            <label>Semestre (optionnel, ex : 2025-S1)</label>
+            <label>Semestre (ex : 2025-S1)</label>
             <input value={semestre} onChange={(e) => setSemestre(e.target.value)} placeholder="2025-S1" />
           </div>
 
@@ -528,8 +529,9 @@ export default function CreationQcm() {
                 value={q.enonce}
                 onChange={(e) => majQuestion(qIdx, 'enonce', e.target.value)}
                 placeholder="Énoncé de la question"
-                style={{ width: '100%', minHeight: 60, marginTop: 8, marginBottom: 14 }}
+                style={{ width: '100%', minHeight: 60, marginTop: 8, marginBottom: 8 }}
               />
+              <ImageEnonceUpload identifiant={q.cleLocale} urlActuelle={q.lien} onChange={(url) => majQuestion(qIdx, 'lien', url)} />
 
               {q.items.map((it, iIdx) => (
                 <div key={iIdx} className="item-editor">
@@ -552,6 +554,7 @@ export default function CreationQcm() {
                 <div style={{ marginTop: 14, padding: 16, background: 'var(--bg-panel)', borderRadius: 'var(--radius-md)' }}>
                   <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase' }}>Ce que verra l'étudiant</p>
                   <h3 style={{ marginTop: 0 }}>{q.enonce || <em style={{ color: 'var(--text-muted)' }}>(énoncé vide)</em>}</h3>
+                  {q.lien && <img src={q.lien} alt="" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-md)', margin: '0 0 12px' }} />}
                   {q.items.map((it, iIdx) => (
                     <div key={iIdx} className="item">
                       <span className="item-letter">{LETTRES[iIdx]}</span>

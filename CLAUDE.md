@@ -42,6 +42,44 @@ ne pas avoir à retoucher toutes les policies RLS. À la place : une colonne
 que l'affichage/les redirections côté client, pas la sécurité de fond. **Reproduire ce
 pattern** pour toute future segmentation de comptes plutôt que de créer un rôle.
 
+## Système de filières (modalités / sous-filières)
+
+Ajouté le 2026-09-18 pour gérer plusieurs filières médicales (MMOPK) avec des maquettes de
+matières différentes. Hiérarchie : `modalites` (ex: Pass/Las, avec `sans_facultatif` qui
+force toutes ses matières en obligatoire pour toutes ses sous-filières) → `sous_filieres`
+(ex: Médecine/Pharmacie/Kiné) → `sous_filiere_matieres` (statut `obligatoire`/`facultative`
+par matière ; l'absence de ligne = "ne concerne pas"). Un étudiant choisit sa filière une
+seule fois via `/choisir-filiere` (mur obligatoire posé dans `Navbar.jsx`, juste après le
+fetch du profil : `role === 'etudiant' && !modalite_id` → redirection), **choix irréversible
+pour lui** ensuite — seul un tuteur peut le modifier, depuis `FicheEtudiant.jsx`. Les deux
+utilisent le composant partagé `src/components/SelecteurFiliere.jsx`.
+
+Toute écriture passe par la fonction RPC `appliquer_filiere_etudiant(p_profile_id,
+p_modalite_id, p_sous_filiere_ids[], p_matieres_facultatives_ids[])` (SECURITY DEFINER) :
+calcule le statut par matière avec la règle "le plus strict gagne" (obligatoire prime dès
+qu'une sous-filière choisie la classe obligatoire), puis **fusionne** le résultat dans
+`profil_matieres` par upsert sur `(profile_id, matiere_id)` plutôt que de tout recréer — les
+lignes dont la matière reste dans le nouveau calcul gardent leur `compte_classement`
+existant (réglage manuel d'un tuteur, voir plus bas), seules les lignes obsolètes sont
+supprimées et les nouvelles insérées avec `compte_classement = true`. Autorisation : tuteur/
+proprietaire, ou l'étudiant lui-même uniquement si son `profiles.modalite_id` est encore
+`null`.
+
+Deux mécanismes d'exclusion de classement à ne pas confondre : `profil_matieres.
+compte_classement` (permanent, par matière, réglable par un tuteur sur `FicheEtudiant.jsx`
+même pour une matière obligatoire — la matière reste visible à l'étudiant, juste exclue des
+classements) et `exclusions_classement` (ponctuel, par `qcm_id` ou `semaine_kholle_id`, géré
+depuis le panneau admin de `Classement.jsx` pour réinitialiser un classement ou exclure un
+étudiant précis).
+
+`ListeQcm.jsx` restreint les QCM visibles aux matières du `profil_matieres` de l'étudiant
+(filtrage **côté client uniquement**, même compromis assumé que le mode annale — décision
+explicitement confirmée avec le propriétaire plutôt que d'ajouter une policy RLS). Dans
+`Classement.jsx`, les classements sont recalculés par sous-filière active : les matières
+facultatives ont leur propre classement (par matière/par kholle) mais n'alimentent jamais le
+classement général du semestre, qui ne compte que les matières obligatoires de la
+sous-filière affichée.
+
 ## Base de données — tables principales
 
 - `profiles` — comptes (role, categorie_compte, statut_compte, essai_fin, compte_actif,
@@ -61,11 +99,23 @@ pattern** pour toute future segmentation de comptes plutôt que de créer un rô
   **le SELECT est indispensable même si le bucket est public**, sinon `.remove()` ne trouve
   rien à supprimer et échoue silencieusement sans erreur). Upload géré par
   `src/lib/uploadImage.js` (compression canvas côté client, 500 Ko max, redimensionnement
-  itératif) + `src/components/ImageEnonceUpload.jsx`, utilisés uniquement depuis
-  `EditionQcm.jsx` (l'image ne peut être ajoutée qu'une fois la question déjà créée en
-  base — impossible avant publication, à l'étape de saisie de `CreationQcm.jsx`).
+  itératif) + `src/components/ImageEnonceUpload.jsx`, utilisés à la fois dans
+  `CreationQcm.jsx` (étape 2, avant publication — `uploaderImage(identifiant, ...)` prend un
+  identifiant purement local `question.cleLocale` tant que la question n'a pas de vrai id en
+  base, le lien est inséré avec la question à la publication) et `EditionQcm.jsx` (après
+  coup, `question.id` réel). `uploaderImage`/`supprimerImageStockage` ne touchent plus du
+  tout la table `questions` — c'est à l'appelant de répercuter `lien` dans son propre état
+  (et de l'enregistrer, immédiatement ou via son bouton "Enregistrer"/"Publier").
 - `attempts`, `attempt_answers` — tentatives et réponses détaillées
-- `semaines_kholle`, `signalements_erreur`, `notifications`
+- `semaines_kholle`, `signalements_erreur`, `notifications`. **`semaines_kholle.date_samedi`
+  n'a plus de contrainte unique depuis le 2026-09-18** — plusieurs créneaux de kholle
+  peuvent exister sur la même date calendaire (contrainte supprimée exprès : elle forçait
+  `CreationQcm.jsx` à réutiliser silencieusement l'horaire d'un créneau déjà existant à la
+  même date dès qu'un tuteur retapait sa propre date/heure, même sans le sélectionner dans
+  la liste — un tuteur qui n'était pas le premier à créer un créneau sur une date donnée se
+  retrouvait "coincé" sur l'horaire du premier). Depuis, `CreationQcm.jsx` ne réutilise un
+  créneau que si le tuteur le sélectionne explicitement dans la liste des créneaux
+  existants ; sinon un nouveau créneau est toujours créé avec l'horaire tapé.
 - `canaux`, `canal_membres`, `canal_dernier_vu`, `messages` — forum
 - `types_echeance`, `echeances` — planning
 - `historique_comptes`, `historique_qcm` — audit trail, avec `archive` (bool) et purge
@@ -73,6 +123,9 @@ pattern** pour toute future segmentation de comptes plutôt que de créer un rô
   `purger_historique_ancien()`
 - `parametres` — table clé/valeur pour tous les réglages globaux (voir plus bas)
 - `annonces`, `annonces_vues` — popups d'annonce ciblées (audience + durée)
+- `modalites`, `sous_filieres`, `sous_filiere_matieres`, `profil_sous_filieres`,
+  `profil_matieres`, `exclusions_classement` — système de filières, voir section dédiée
+  plus haut. `profiles.modalite_id` référence `modalites`.
 
 ### Vues
 
@@ -84,7 +137,8 @@ pattern** pour toute future segmentation de comptes plutôt que de créer un rô
 
 `mon_role()`, `purger_historique_ancien()`, `cloturer_kholles_expirees`,
 `envoyer_rappels_echeances`, `propager_horaire_kholle`, `proteger_champs_profil`,
-`verifier_tentative_unique`, `alerter_essais_expirants`
+`verifier_tentative_unique`, `alerter_essais_expirants`, `appliquer_filiere_etudiant`
+(voir section « Système de filières »)
 
 ### Paramètres globaux (table `parametres`)
 
@@ -191,7 +245,9 @@ CreationQcm, EditionQcm, GestionQcm (+ signalements, dupliquer, masquer, export 
 Resultats (fusion Résultats + Carnet d'erreurs depuis le 2026-09-13 — onglets "Historique"
 / "Erreurs à revoir" dans une seule page, `CarnetErreurs.jsx` supprimé), RevisionErreurs,
 DetailTentative, Classement, Statistiques, Comptes, FicheEtudiant, FicheTuteur, Profil
-(paramètres + site + annonces), Historiques, Forum, Planning, MesStats, DefinirMotDePasse.
+(paramètres + site + annonces), Historiques, Forum, Planning, MesStats, DefinirMotDePasse,
+GestionFilieres (`/filieres`, tuteur+proprietaire), ChoisirFiliere (`/choisir-filiere`,
+onboarding étudiant obligatoire, hors `<Layout>`).
 
 ## Ce qui reste à faire / pistes connues
 

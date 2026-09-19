@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { envoyerNotification, envoyerNotificationGroupe } from '../lib/notifier';
 import { exporterUnQcm, exporterSelectionQcm } from '../lib/exportQcm';
 import PopupMatieres from '../components/PopupMatieres';
+import PopupHorairesKholle from '../components/PopupHorairesKholle';
 
 export default function GestionQcm() {
   const [qcms, setQcms] = useState([]);
@@ -16,6 +17,7 @@ export default function GestionQcm() {
   const [filtreMatiere, setFiltreMatiere] = useState('');
   const [filtreCours, setFiltreCours] = useState('');
   const [popupMatieresOuverte, setPopupMatieresOuverte] = useState(false);
+  const [popupHorairesOuverte, setPopupHorairesOuverte] = useState(false);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null);
   const [historiquesParQcm, setHistoriquesParQcm] = useState({});
   const [selection, setSelection] = useState([]);
@@ -24,6 +26,7 @@ export default function GestionQcm() {
   const [filtreAuteur, setFiltreAuteur] = useState('');
   const [filtreType, setFiltreType] = useState('tous');
   const [matiereDeplacement, setMatiereDeplacement] = useState('');
+  const [nouveauSemestreSelection, setNouveauSemestreSelection] = useState('');
   const [admins, setAdmins] = useState([]);
   const [menuActionsOuvert, setMenuActionsOuvert] = useState(null);
   const navigate = useNavigate();
@@ -103,6 +106,18 @@ export default function GestionQcm() {
     await supabase.from('qcms').update({ matiere_id: matiereDeplacement, cours_id: null }).in('id', selection);
     setSelection([]);
     setMatiereDeplacement('');
+    charger();
+  }
+
+  async function changerSemestreSelection() {
+    if (selection.length === 0 || !nouveauSemestreSelection.trim()) return;
+    if (!/^\d{4}-S[12]$/.test(nouveauSemestreSelection.trim())) {
+      alert('Le semestre doit être au format AAAA-S1 ou AAAA-S2 (ex : 2026-S1).');
+      return;
+    }
+    await supabase.from('qcms').update({ semestre: nouveauSemestreSelection.trim() }).in('id', selection);
+    setSelection([]);
+    setNouveauSemestreSelection('');
     charger();
   }
 
@@ -368,6 +383,7 @@ export default function GestionQcm() {
           <button className="btn btn-outline" onClick={() => setAfficherSignalements((v) => !v)}>
             🚩 Signalements {signalements.filter((s) => !s.traite).length > 0 && `(${signalements.filter((s) => !s.traite).length})`}
           </button>
+          <button className="btn btn-outline" onClick={() => setPopupHorairesOuverte(true)}>🕒 Horaires des kholles</button>
           <Link to="/qcm/nouveau" className="btn btn-primary" style={{ textDecoration: 'none' }}>+ Ajouter un QCM</Link>
         </div>
       </div>
@@ -501,6 +517,13 @@ export default function GestionQcm() {
               {matieres.map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
             </select>
             <button className="btn btn-outline btn-sm" disabled={!matiereDeplacement} onClick={deplacerSelection}>Déplacer</button>
+            <input
+              value={nouveauSemestreSelection}
+              onChange={(e) => setNouveauSemestreSelection(e.target.value)}
+              placeholder="AAAA-S1"
+              style={{ width: 140 }}
+            />
+            <button className="btn btn-outline btn-sm" disabled={!nouveauSemestreSelection.trim()} onClick={changerSemestreSelection}>Changer semestre</button>
             <button className="btn btn-outline btn-sm" onClick={validerSelection}>✓ Valider</button>
             <button className="btn btn-outline btn-sm" onClick={masquerSelection}>Masquer</button>
             <button className="btn btn-outline btn-sm" onClick={exporterSelectionCourante}>⬇️ Exporter</button>
@@ -532,6 +555,10 @@ export default function GestionQcm() {
 
       {popupMatieresOuverte && (
         <PopupMatieres onFermer={() => { setPopupMatieresOuverte(false); charger(); }} />
+      )}
+
+      {popupHorairesOuverte && (
+        <PopupHorairesKholle monId={monId} onFermer={() => setPopupHorairesOuverte(false)} />
       )}
     </div>
   );

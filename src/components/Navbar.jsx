@@ -34,6 +34,11 @@ export default function Navbar() {
         return;
       }
 
+      if (data?.role === 'etudiant' && !data.modalite_id && location.pathname !== '/choisir-filiere') {
+        navigate('/choisir-filiere');
+        return;
+      }
+
       setProfil(data);
 
       if (data) {
@@ -149,6 +154,7 @@ export default function Navbar() {
                 <Link to="/qcm/gerer" className="dropdown-item">Gérer les QCM</Link>
                 <Link to="/statistiques" className="dropdown-item">Statistiques</Link>
                 <Link to="/comptes" className="dropdown-item">Comptes</Link>
+                <Link to="/filieres" className="dropdown-item">Filières</Link>
                 <Link to="/historiques" className="dropdown-item">Historique</Link>
               </div>
             )}
@@ -196,6 +202,7 @@ export default function Navbar() {
                 <Link to="/qcm/gerer" className={lienClasse('/qcm/gerer')}>Gérer les QCM</Link>
                 <Link to="/statistiques" className={lienClasse('/statistiques')}>Statistiques</Link>
                 <Link to="/comptes" className={lienClasse('/comptes')}>Comptes</Link>
+                <Link to="/filieres" className={lienClasse('/filieres')}>Filières</Link>
                 <Link to="/historiques" className={lienClasse('/historiques')}>Historique</Link>
               </>
             )}

@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
-import { uploaderImageQuestion, supprimerImageQuestion, MAX_IMAGE_BYTES } from '../lib/uploadImage';
+import { uploaderImage, supprimerImageStockage, MAX_IMAGE_BYTES } from '../lib/uploadImage';
 
-// Import + compression d'une image pour l'énoncé d'une question. Nécessite un `questionId`
-// déjà existant en base (le champ questions.lien est mis à jour immédiatement à l'upload,
-// indépendamment du bouton "Enregistrer" de la page qui l'utilise).
-export default function ImageEnonceUpload({ questionId, urlActuelle, onChange }) {
+// Import + compression d'une image pour l'énoncé d'une question. `identifiant` sert de
+// préfixe de nom de fichier dans le Storage (question.id réel, ou une clé locale temporaire
+// tant que la question n'est pas encore créée en base — voir CreationQcm.jsx). L'image
+// remontée par `onChange` est stockée localement par l'appelant ; c'est lui qui décide quand
+// la persister (immédiatement, ou au moment d'enregistrer/publier le QCM).
+export default function ImageEnonceUpload({ identifiant, urlActuelle, onChange }) {
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState('');
   const inputRef = useRef(null);
@@ -16,7 +18,7 @@ export default function ImageEnonceUpload({ questionId, urlActuelle, onChange })
     setErreur('');
     setEnCours(true);
     try {
-      const url = await uploaderImageQuestion(questionId, fichier, urlActuelle);
+      const url = await uploaderImage(identifiant, fichier, urlActuelle);
       onChange(url);
     } catch (err) {
       setErreur(err.message || "Échec de l'import de l'image.");
@@ -30,7 +32,7 @@ export default function ImageEnonceUpload({ questionId, urlActuelle, onChange })
     setEnCours(true);
     setErreur('');
     try {
-      await supprimerImageQuestion(questionId, urlActuelle);
+      await supprimerImageStockage(urlActuelle);
       onChange(null);
     } catch (err) {
       setErreur(err.message || 'Erreur lors de la suppression.');
