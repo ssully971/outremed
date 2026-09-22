@@ -11,6 +11,21 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const ORIGINE_CANONIQUE = 'https://outremed.vercel.app';
+
+// Le tuteur/propriétaire peut se trouver sur une URL de déploiement Vercel différente de
+// l'alias stable (preview, ancien lien favori, etc.) — si le redirect_to envoyé à Supabase ne
+// correspond pas exactement à l'allowlist configurée côté Auth, Supabase l'ignore et retombe
+// silencieusement sur site_url SANS le chemin /definir-mot-de-passe, envoyant l'étudiant sur
+// la page d'accueil au lieu de la page de création de mot de passe (bug constaté le
+// 2026-09-22). On ne fait donc jamais confiance à l'origine envoyée par le client au-delà de
+// ce qu'on sait déjà accepté par Supabase.
+function origineFiable(redirectUrl) {
+  if (redirectUrl === ORIGINE_CANONIQUE) return redirectUrl;
+  if (redirectUrl && redirectUrl.startsWith('http://localhost')) return redirectUrl;
+  return ORIGINE_CANONIQUE;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -50,7 +65,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Impossible de créer un compte propriétaire par ce biais' }), { status: 403, headers: corsHeaders });
     }
 
-    const origineSite = redirect_url || 'https://outremed.vercel.app';
+    const origineSite = origineFiable(redirect_url);
     const libelleRole = categorie_compte === 'annale' ? 'étudiant annale' : role === 'tuteur' ? 'tuteur' : 'étudiant';
     const { data: newUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${origineSite}/definir-mot-de-passe`,

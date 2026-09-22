@@ -16,6 +16,7 @@ export default function DemandeInscription() {
   const [email, setEmail] = useState('');
   const [pseudo, setPseudo] = useState('');
   const [nomComplet, setNomComplet] = useState('');
+  const [siteWeb, setSiteWeb] = useState(''); // honeypot anti-spam, doit rester vide
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
   const [envoye, setEnvoye] = useState(false);
@@ -34,7 +35,7 @@ export default function DemandeInscription() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
-        body: JSON.stringify({ email, pseudo, nom_complet: nomComplet }),
+        body: JSON.stringify({ email, pseudo, nom_complet: nomComplet, site_web: siteWeb }),
       });
       result = await res.json().catch(() => ({}));
     } catch {
@@ -83,13 +84,20 @@ export default function DemandeInscription() {
                   <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
                 <div className="field">
-                  <label htmlFor="pseudo">Pseudo souhaité</label>
-                  <input id="pseudo" value={pseudo} onChange={(e) => setPseudo(e.target.value)} required />
+                  <label htmlFor="pseudo">Pseudo</label>
+                  <input id="pseudo" value={pseudo} onChange={(e) => setPseudo(e.target.value)} placeholder="Ex : juliend." required />
+                  <p className="field-hint">Format attendu : ton prénom suivi de la première lettre de ton nom, puis un point (ex : Julien Dupont → juliend.).</p>
                 </div>
                 <div className="field">
                   <label htmlFor="nomComplet">Nom complet</label>
                   <input id="nomComplet" value={nomComplet} onChange={(e) => setNomComplet(e.target.value)} required />
                   <p className="field-hint">Sert uniquement à la vérification manuelle par un tuteur.</p>
+                </div>
+
+                {/* Honeypot anti-spam : invisible pour un humain, souvent rempli par les bots */}
+                <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }}>
+                  <label htmlFor="siteWeb">Site web</label>
+                  <input id="siteWeb" name="siteWeb" tabIndex={-1} autoComplete="off" value={siteWeb} onChange={(e) => setSiteWeb(e.target.value)} />
                 </div>
 
                 {erreur && <div className="error-msg">{erreur}</div>}

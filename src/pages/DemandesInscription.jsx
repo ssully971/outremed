@@ -9,6 +9,7 @@ export default function DemandesInscription() {
   const [onglet, setOnglet] = useState('en_attente');
   const [recherche, setRecherche] = useState('');
   const [validationOuverte, setValidationOuverte] = useState(null);
+  const [pseudoValidation, setPseudoValidation] = useState('');
   const [statutCompte, setStatutCompte] = useState('actif');
   const [essaiSemaines, setEssaiSemaines] = useState(1);
   const [essaiGratuitActif, setEssaiGratuitActif] = useState(true);
@@ -36,6 +37,7 @@ export default function DemandesInscription() {
 
   function ouvrirValidation(demande) {
     setValidationOuverte(demande);
+    setPseudoValidation(demande.pseudo);
     setStatutCompte('actif');
     setMessage('');
   }
@@ -46,6 +48,9 @@ export default function DemandesInscription() {
     setMessage('');
 
     const demande = validationOuverte;
+    const pseudoFinal = pseudoValidation.trim();
+    if (!pseudoFinal) { setEnCours(false); setMessage('Erreur : le pseudo ne peut pas être vide.'); return; }
+
     const { data: session } = await supabase.auth.getSession();
 
     let res, result;
@@ -54,7 +59,7 @@ export default function DemandesInscription() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
         body: JSON.stringify({
-          email: demande.email, pseudo: demande.pseudo, role: 'etudiant',
+          email: demande.email, pseudo: pseudoFinal, role: 'etudiant',
           statut_compte: statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin,
         }),
       });
@@ -72,7 +77,7 @@ export default function DemandesInscription() {
     }
 
     await supabase.from('demandes_inscription').update({
-      statut: 'validee', traite_par: session.session.user.id, traite_le: new Date().toISOString(),
+      statut: 'validee', pseudo: pseudoFinal, traite_par: session.session.user.id, traite_le: new Date().toISOString(),
     }).eq('id', demande.id);
 
     const { data: autresAdmins } = await supabase
@@ -80,7 +85,7 @@ export default function DemandesInscription() {
     if (autresAdmins && autresAdmins.length > 0) {
       await envoyerNotificationGroupe(
         autresAdmins.map((a) => a.id), 'compte_admin',
-        `${monProfil.pseudo} a validé la demande d'inscription de ${demande.pseudo}`,
+        `${monProfil.pseudo} a validé la demande d'inscription de ${pseudoFinal}`,
         '/demandes-inscription'
       );
     }
@@ -133,20 +138,26 @@ export default function DemandesInscription() {
 
       <div className="qcm-manage-list">
         {demandesFiltrees.map((d) => (
-          <div key={d.id} className="qcm-manage-row" style={{ '--row-color': d.statut === 'rejetee' ? 'var(--error)' : d.statut === 'validee' ? 'var(--success)' : 'var(--accent)' }}>
-            <div className="bar" />
-            <div>
+          <div
+            key={d.id}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+              background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 18px',
+            }}
+          >
+            <div style={{ width: 4, height: 36, borderRadius: 3, flexShrink: 0, background: d.statut === 'rejetee' ? 'var(--error)' : d.statut === 'validee' ? 'var(--success)' : 'var(--accent)' }} />
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
               <div className="qmr-name">{d.pseudo} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem' }}>({d.nom_complet})</span></div>
               <div className="qmr-sub">{d.email}</div>
             </div>
-            <div className="qmr-type">{new Date(d.created_at).toLocaleDateString('fr-FR')}</div>
+            <div className="qmr-type" style={{ flexShrink: 0 }}>{new Date(d.created_at).toLocaleDateString('fr-FR')}</div>
             {d.statut === 'en_attente' ? (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                 <button className="btn btn-primary btn-sm" onClick={() => ouvrirValidation(d)}>Valider</button>
                 <button className="btn btn-outline btn-sm" style={{ color: 'var(--error)', borderColor: 'var(--error)' }} onClick={() => rejeterDemande(d)}>Rejeter</button>
               </div>
             ) : (
-              <span className={`status-tag ${d.statut === 'validee' ? 'status-validated' : 'status-pending'}`} style={d.statut === 'rejetee' ? { background: 'var(--error-bg)', color: 'var(--error)' } : undefined}>
+              <span className={`status-tag ${d.statut === 'validee' ? 'status-validated' : 'status-pending'}`} style={{ flexShrink: 0, ...(d.statut === 'rejetee' ? { background: 'var(--error-bg)', color: 'var(--error)' } : undefined) }}>
                 {d.statut === 'validee' ? 'Validée' : 'Rejetée'}
               </span>
             )}
@@ -166,12 +177,17 @@ export default function DemandesInscription() {
             </p>
 
             <div className="field">
+              <label>Nom complet (déclaré)</label>
+              <input value={validationOuverte.nom_complet} disabled />
+            </div>
+            <div className="field">
               <label>Email</label>
               <input value={validationOuverte.email} disabled />
             </div>
             <div className="field">
               <label>Pseudo</label>
-              <input value={validationOuverte.pseudo} disabled />
+              <input value={pseudoValidation} onChange={(e) => setPseudoValidation(e.target.value)} required />
+              <p className="field-hint">Format attendu : prénom + initiale du nom + un point (ex : juliend.) — corrige si besoin avant de valider.</p>
             </div>
             <div className="field">
               <label>Statut</label>

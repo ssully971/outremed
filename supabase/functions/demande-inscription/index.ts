@@ -12,16 +12,48 @@ const supabaseAdmin = createClient(
 );
 
 const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_TENTATIVES_PAR_HEURE = 5;
+
+function ipAppelant(req) {
+  const xff = req.headers.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'inconnue';
+}
 
 // Fonction publique, volontairement sans vérification de Bearer token : un candidat n'a par
-// définition pas encore de compte. Toute la logique sensible (anti-doublon, écriture) est
-// donc entièrement côté serveur ici plutôt que dans une policy RLS, puisque la table
-// demandes_inscription n'a aucune policy INSERT — c'est ce endpoint qui fait foi.
+// définition pas encore de compte. Toute la logique sensible (anti-doublon, anti-spam,
+// écriture) est donc entièrement côté serveur ici plutôt que dans une policy RLS, puisque la
+// table demandes_inscription n'a aucune policy INSERT — c'est ce endpoint qui fait foi.
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { email, pseudo, nom_complet } = await req.json();
+    const ip = ipAppelant(req);
+
+    // Anti-bruteforce : on journalise cette tentative avant tout, y compris les échecs de
+    // validation qui suivent — c'est justement le spam de tentatives qu'on veut limiter, pas
+    // seulement les demandes qui aboutissent.
+    await supabaseAdmin.from('demande_inscription_tentatives').insert({ ip });
+    // Purge best-effort des tentatives de plus de 24h, pas besoin de pg_cron pour ce volume.
+    await supabaseAdmin.from('demande_inscription_tentatives').delete().lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+    const { count } = await supabaseAdmin
+      .from('demande_inscription_tentatives')
+      .select('id', { count: 'exact', head: true })
+      .eq('ip', ip)
+      .gt('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+    if ((count || 0) > MAX_TENTATIVES_PAR_HEURE) {
+      return new Response(JSON.stringify({ error: 'Trop de tentatives. Réessaie dans une heure.' }), { status: 429, headers: corsHeaders });
+    }
+
+    const { email, pseudo, nom_complet, site_web } = await req.json();
+
+    // Honeypot : champ invisible pour un humain, que les bots remplissent souvent en
+    // aveugle. On répond un succès factice sans rien écrire, pour ne pas leur indiquer
+    // qu'ils ont été détectés.
+    if (site_web) {
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+    }
 
     const emailNormalise = (email || '').trim().toLowerCase();
     const pseudoNettoye = (pseudo || '').trim();

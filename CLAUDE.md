@@ -339,7 +339,62 @@ attente » / « Historique »). **Valider** rappelle exactement le même appel �
 statut actif/essai gratuit, `role: 'etudiant'` forcé — puis marque la demande `validee` avec
 `traite_par`/`traite_le`. **Rejeter** ne fait qu'un `update` direct du statut (pas d'edge
 function nécessaire, action réservée par RLS). Aucune des deux actions ne supprime jamais la
-ligne : l'historique reste consultable indéfiniment.
+ligne : l'historique reste consultable indéfiniment. Dans la modale de validation, le pseudo
+reste **modifiable** (le candidat peut avoir mal respecté le format) et le nom complet déclaré
+est affiché en lecture seule à côté — la correction éventuelle du pseudo est aussi répercutée
+sur la ligne `demandes_inscription` elle-même (pas seulement sur le compte créé), pour que
+l'historique reflète ce qui a réellement été utilisé.
+
+**Convention de pseudo** (rappelée dans le champ du formulaire public et dans la modale de
+validation) : prénom + initiale du nom + un point, ex. `juliend.` — c'est une convention
+d'usage affichée en `field-hint`, pas une contrainte technique appliquée en base ou côté
+serveur (le format n'est pas validé par regex, seul un champ non vide est exigé).
+
+**Anti-spam/anti-bruteforce (ajouté le 2026-09-22)** sur `demande-inscription` :
+- **Honeypot** : champ caché `site_web` (hors écran via CSS, `tabIndex={-1}`, jamais rempli par
+  un humain) — si non vide à la soumission, la fonction renvoie un faux succès sans rien
+  écrire, pour ne pas révéler au bot qu'il a été repéré.
+- **Limitation par IP** : table `demande_inscription_tentatives` (`ip`, `created_at`),
+  écriture/lecture réservées à `service_role`. Chaque appel — succès **ou** échec de
+  validation — journalise une tentative *avant* le reste du traitement ; au-delà de 5
+  tentatives par IP sur la dernière heure, la fonction répond `429` sans aller plus loin.
+  Purge inline des lignes de plus de 24h à chaque appel (pas de `pg_cron`, volume trop faible
+  pour le justifier). L'IP est lue via `x-forwarded-for` (repli sur `x-real-ip`) — c'est le
+  header que la plateforme Supabase pose sur les edge functions, pas un en-tête à faire
+  confiance si la fonction changeait un jour de plateforme d'hébergement.
+
+## Piège Supabase Auth — `redirect_to` non listé retombe sur le domaine nu, sans erreur
+
+Bug diagnostiqué le 2026-09-22 : des étudiants invités atterrissaient sur la page d'accueil au
+lieu de `/definir-mot-de-passe`, et devaient passer par « mot de passe oublié » pour activer
+leur compte. Diagnostiqué en générant un vrai lien d'invite via
+`supabaseAdmin.auth.admin.generateLink({ type: 'invite', ... })` (sans envoyer d'email) puis en
+suivant la redirection réelle avec `curl -i` — la seule façon de voir ce que Supabase fait
+vraiment, indépendamment du code ou du dashboard :
+- Avec un `redirectTo` qui correspond à `additional_redirect_urls` (`https://outremed.vercel.app/**`,
+  déjà configuré côté Supabase), le lien redirige correctement vers
+  `.../definir-mot-de-passe#access_token=...`.
+- Avec un `redirectTo` qui **ne correspond pas** (ex. `http://localhost:5173/...`, ou toute URL
+  de déploiement Vercel différente de l'alias stable), Supabase ne renvoie **aucune erreur** —
+  il substitue silencieusement `redirect_to` par `site_url` **sans le chemin demandé**
+  (`https://outremed.vercel.app`, la racine nue) dès la génération du lien. L'étudiant atterrit
+  donc sur la page d'accueil sans qu'aucun message n'indique quoi que ce soit d'anormal.
+- Cause réelle : `create-user` construisait `redirectTo` à partir de `redirect_url` envoyé par
+  le client (`window.location.origin`) sans le valider — un tuteur créant un compte depuis une
+  URL de déploiement Vercel autre que l'alias stable (preview, lien favori périmé, etc.)
+  déclenchait le bug sans que rien ne le signale.
+- **Corrigé** dans [create-user/index.ts](supabase/functions/create-user/index.ts) :
+  `origineFiable()` n'accepte l'origine envoyée par le client que si elle vaut exactement
+  `https://outremed.vercel.app` ou commence par `http://localhost` ; toute autre valeur retombe
+  sur la constante `ORIGINE_CANONIQUE`, qui correspond toujours à ce que Supabase accepte déjà.
+  **Tout nouvel appel à `inviteUserByEmail`/`generateLink` avec un `redirectTo` dérivé d'une
+  origine fournie par le client doit passer par ce même genre de validation stricte** —
+  ne jamais faire confiance à `window.location.origin` seul pour cet usage précis.
+- Si l'allowlist Supabase (`additional_redirect_urls`) doit un jour changer, le faire via
+  `npx supabase config pull` (jamais un `push` à l'aveugle : `supabase/config.toml` contient
+  encore des valeurs par défaut de dev local sur beaucoup de champs sans rapport — `push`
+  écraserait des réglages de prod comme `otp_length`, le MFA, ou la taille du pooler) puis
+  ajuster uniquement `auth.site_url`/`auth.additional_redirect_urls` avant de `push`.
 
 ## Fonctions serveur (Edge Functions)
 
