@@ -6,6 +6,10 @@ import ImageEnonceUpload from '../components/ImageEnonceUpload';
 
 const LETTRES = 'ABCDEFGH';
 
+function formatDateHeure(iso) {
+  return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function EditionQcm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -14,6 +18,7 @@ export default function EditionQcm() {
   const [questions, setQuestions] = useState([]);
   const [matieres, setMatieres] = useState([]);
   const [cours, setCours] = useState([]);
+  const [semainesKholle, setSemainesKholle] = useState([]);
   const [message, setMessage] = useState('');
   const [enregistrement, setEnregistrement] = useState(false);
   const [apercuOuvert, setApercuOuvert] = useState(null);
@@ -47,6 +52,11 @@ export default function EditionQcm() {
     const { data: crs } = await supabase.from('cours').select('*').eq('est_prive', false).order('nom');
     setCours(crs || []);
 
+    if (qcmData?.is_kholle) {
+      const { data: semaines } = await supabase.from('semaines_kholle').select('*').order('debut', { ascending: false });
+      setSemainesKholle(semaines || []);
+    }
+
     setChargement(false);
   }
 
@@ -54,6 +64,19 @@ export default function EditionQcm() {
 
   function majQcm(champ, valeur) {
     setQcm((prev) => ({ ...prev, [champ]: valeur }));
+  }
+
+  // Changer la semaine d'une kholle doit aussi répercuter kholle_debut/kholle_fin (copie
+  // dénormalisée sur qcms, utilisée par la fenêtre de visibilité RLS et le classement) —
+  // sinon le QCM resterait affiché/masqué selon l'horaire de son ancienne semaine.
+  function changerSemaineKholle(semaineId) {
+    const semaine = semainesKholle.find((s) => s.id === semaineId);
+    setQcm((prev) => ({
+      ...prev,
+      semaine_kholle_id: semaineId || null,
+      kholle_debut: semaine ? semaine.debut : prev.kholle_debut,
+      kholle_fin: semaine ? semaine.fin : prev.kholle_fin,
+    }));
   }
 
   function majQuestion(qIdx, champ, valeur) {
@@ -109,6 +132,9 @@ export default function EditionQcm() {
       cours_id: qcm.cours_id,
       is_classe: qcm.is_classe,
       semestre: qcm.semestre,
+      semaine_kholle_id: qcm.semaine_kholle_id,
+      kholle_debut: qcm.kholle_debut,
+      kholle_fin: qcm.kholle_fin,
       modifie_par: monId,
       modifie_le: new Date().toISOString(),
     }).eq('id', id);
@@ -202,6 +228,19 @@ export default function EditionQcm() {
             {cours.filter((c) => c.matiere_id === qcm.matiere_id).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
           </select>
         </div>
+
+        {qcm.is_kholle && (
+          <div className="field">
+            <label>Semaine de kholle</label>
+            <select value={qcm.semaine_kholle_id || ''} onChange={(e) => changerSemaineKholle(e.target.value)}>
+              <option value="">— aucune —</option>
+              {semainesKholle.map((s) => (
+                <option key={s.id} value={s.id}>Du {formatDateHeure(s.debut)} au {formatDateHeure(s.fin)}</option>
+              ))}
+            </select>
+            <p className="field-hint">Déplace ce QCM vers une autre semaine déjà créée — son horaire de visibilité s'aligne automatiquement sur celui de la semaine choisie.</p>
+          </div>
+        )}
 
         <div className="field">
           <label>Semestre</label>
