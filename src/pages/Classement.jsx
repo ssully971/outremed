@@ -172,10 +172,13 @@ export default function Classement() {
         .map((r) => ({ pseudo: r.pseudo, score: r.score.toFixed(2) }));
     });
 
+    // Chaque QCM est ramené sur 20 avant la moyenne, pour que le nombre de QCM de la kholle
+    // (souvent un par matière) ou un nb_questions différent d'un QCM à l'autre ne fausse pas
+    // la note globale (jamais une simple somme des scores bruts).
     const general = etudiantsGroupe.map((e) => {
       const scoresEtudiant = qcmsGroupe.map((q) => {
         const tentative = attemptsGroupe.find((a) => a.qcm_id === q.id && a.user_id === e.id);
-        return tentative ? Number(tentative.score) : 0;
+        return tentative ? (Number(tentative.score) / (q.nb_questions || 1)) * 20 : 0;
       });
       const moyenne = qcmsGroupe.length > 0 ? scoresEtudiant.reduce((s, v) => s + v, 0) / qcmsGroupe.length : 0;
       return { pseudo: e.pseudo, moyenne: moyenne.toFixed(2) };
@@ -236,6 +239,29 @@ export default function Classement() {
     await supabase.from('exclusions_classement').delete().eq('id', exclusionId);
     setClassementConcours({});
     await rechargerExclusions();
+  }
+
+  // Contrairement à exclureSelectionDuClassement (qui ne fait que masquer une tentative du
+  // classement sans y toucher), ceci supprime réellement les tentatives — utile quand un
+  // étudiant s'est retrouvé avec un résultat injustifié (ex: 0 alors qu'il n'a pas pu faire
+  // la kholle) qu'il faut effacer, pas seulement cacher.
+  async function supprimerResultatSelection() {
+    if (!porteeAdmin || selectionEtudiantsAdmin.length === 0) return;
+    if (!confirm(`Supprimer définitivement le résultat de ${selectionEtudiantsAdmin.length} étudiant(s) sur cette portée ? Action irréversible, contrairement à l'exclusion.`)) return;
+
+    let qcmIds;
+    if (porteeAdmin.type === 'semaine') {
+      const { data: qcmsDeLaSemaine } = await supabase.from('qcms').select('id').eq('semaine_kholle_id', porteeAdmin.id);
+      qcmIds = (qcmsDeLaSemaine || []).map((q) => q.id);
+    } else {
+      qcmIds = [porteeAdmin.id];
+    }
+    if (qcmIds.length === 0) return;
+
+    await supabase.from('attempts').delete().in('qcm_id', qcmIds).in('user_id', selectionEtudiantsAdmin);
+    setSelectionEtudiantsAdmin([]);
+    setClassementConcours({});
+    window.location.reload();
   }
 
   if (!monProfil) return <div style={{ padding: 40 }}>Chargement...</div>;
@@ -359,6 +385,9 @@ export default function Classement() {
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                     <button className="btn btn-outline btn-sm" disabled={selectionEtudiantsAdmin.length === 0} onClick={exclureSelectionDuClassement}>
                       Exclure la sélection
+                    </button>
+                    <button className="btn btn-danger-outline btn-sm" disabled={selectionEtudiantsAdmin.length === 0} onClick={supprimerResultatSelection}>
+                      🗑 Supprimer le résultat de la sélection
                     </button>
                     <button className="btn btn-danger-outline btn-sm" onClick={reinitialiserClassement}>
                       Réinitialiser cette portée (lever toutes les exclusions)

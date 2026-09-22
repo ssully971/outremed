@@ -135,18 +135,21 @@ export default function Statistiques() {
 
     const idsQcms = qcmsSession.map((q) => q.id);
     const attemptsSession = toutesAttempts.filter((a) => idsQcms.includes(a.qcm_id));
-    const maxScore = qcmsSession.reduce((s, q) => s + (q.nb_questions || 0), 0);
+    const nbQuestionsParQcm = {};
+    qcmsSession.forEach((q) => { nbQuestionsParQcm[q.id] = q.nb_questions || 1; });
+    const maxScore = 20;
 
-    // Score total par étudiant (somme si plusieurs QCM, ex: kholle)
+    // Chaque QCM est ramené sur 20 puis moyenné entre eux — jamais sommé — une kholle peut
+    // avoir plusieurs QCM (un par matière), la note globale doit rester une note sur 20.
     const parEtudiant = {};
     attemptsSession.forEach((a) => {
-      if (!parEtudiant[a.user_id]) parEtudiant[a.user_id] = { total: 0, temps: 0, nb: 0 };
-      parEtudiant[a.user_id].total += Number(a.score);
+      if (!parEtudiant[a.user_id]) parEtudiant[a.user_id] = { notes: [], temps: 0, nb: 0 };
+      parEtudiant[a.user_id].notes.push((Number(a.score) / nbQuestionsParQcm[a.qcm_id]) * 20);
       parEtudiant[a.user_id].temps += a.temps_passe_secondes || 0;
       parEtudiant[a.user_id].nb += 1;
     });
     const classement = Object.entries(parEtudiant)
-      .map(([userId, v]) => ({ userId, pseudo: profils[userId] || '—', score: v.total, temps: v.temps }))
+      .map(([userId, v]) => ({ userId, pseudo: profils[userId] || '—', score: Number((v.notes.reduce((s, n) => s + n, 0) / v.notes.length).toFixed(1)), temps: v.temps }))
       .sort((a, b) => b.score - a.score);
 
     const nbParticipants = classement.length;

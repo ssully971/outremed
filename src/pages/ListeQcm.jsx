@@ -51,16 +51,14 @@ export default function ListeQcm() {
       setSemaineKholleActuelle(semainePertinente);
       setKholleActive(!!semaineEnCours);
 
-      if (semaineEnCours) {
-        const { data: qcmsSemaineBrut } = await supabase.from('qcms').select('id, titre, matiere_id, nb_questions').eq('semaine_kholle_id', semainePertinente.id);
-        const qcmsSemaine = (qcmsSemaineBrut || []).filter((q) => !matieresAutoriseesLocal || matieresAutoriseesLocal.has(q.matiere_id));
-        const detail = (qcmsSemaine || []).map((q) => {
-          const tentative = (mesAttempts || []).find((a) => a.qcm_id === q.id);
-          const info = (mats || []).find((m) => m.id === q.matiere_id) || {};
-          return { titre: q.titre, matiere: info.nom || 'Autre', couleur: info.couleur || '#FF3EB5', qcmId: q.id, fait: !!tentative, score: tentative?.score, nb_questions: q.nb_questions };
-        });
-        setQcmsKholleDetail(detail);
-      }
+      const { data: qcmsSemaineBrut } = await supabase.from('qcms').select('id, titre, matiere_id, nb_questions').eq('semaine_kholle_id', semainePertinente.id);
+      const qcmsSemaine = (qcmsSemaineBrut || []).filter((q) => !matieresAutoriseesLocal || matieresAutoriseesLocal.has(q.matiere_id));
+      const detail = (qcmsSemaine || []).map((q) => {
+        const tentative = (mesAttempts || []).find((a) => a.qcm_id === q.id);
+        const info = (mats || []).find((m) => m.id === q.matiere_id) || {};
+        return { titre: q.titre, matiere: info.nom || 'Autre', couleur: info.couleur || '#FF3EB5', qcmId: q.id, fait: !!tentative, score: tentative?.score, nb_questions: q.nb_questions };
+      });
+      setQcmsKholleDetail(detail);
     }
   }
 
@@ -200,6 +198,16 @@ export default function ListeQcm() {
             </div>
             <span className="countdown">{decompteKholle()}</span>
           </div>
+          {qcmsKholleDetail.length > 0 && (
+            <div className="kholle-subjects">
+              {qcmsKholleDetail.map((q, idx) => (
+                <div key={idx} className="kholle-subject-chip" style={{ '--sub-color': q.couleur, cursor: 'default' }}>
+                  <span className="dot" />
+                  {q.matiere} — {q.titre}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

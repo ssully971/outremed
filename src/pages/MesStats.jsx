@@ -57,38 +57,47 @@ export default function MesStats() {
     setMeilleureSerieHistorique(meilleure);
 
     if (p.afficher_position_classement) {
-      // Position sur la dernière kholle
+      // Position sur la dernière kholle — chaque QCM ramené sur 20 puis moyenné (jamais
+      // sommé), une kholle ayant souvent plusieurs QCM (un par matière).
       const { data: semaines } = await supabase.from('semaines_kholle').select('*').order('date_samedi', { ascending: false }).limit(1);
       if (semaines && semaines.length > 0) {
-        const { data: qcmsSemaine } = await supabase.from('qcms').select('id').eq('semaine_kholle_id', semaines[0].id);
-        const idsQcms = (qcmsSemaine || []).map((q) => q.id);
-        if (idsQcms.length > 0) {
-          const { data: resultatsSemaine } = await supabase.from('resultats_classement').select('user_id, score').in('qcm_id', idsQcms);
+        const { data: qcmsSemaine } = await supabase.from('qcms').select('id, nb_questions').eq('semaine_kholle_id', semaines[0].id);
+        if ((qcmsSemaine || []).length > 0) {
+          const nbQParQcm = {};
+          qcmsSemaine.forEach((q) => { nbQParQcm[q.id] = q.nb_questions || 1; });
+          const { data: resultatsSemaine } = await supabase.from('resultats_classement').select('user_id, qcm_id, score').in('qcm_id', qcmsSemaine.map((q) => q.id));
           const parEtudiant = {};
           (resultatsSemaine || []).forEach((r) => {
-            parEtudiant[r.user_id] = (parEtudiant[r.user_id] || 0) + Number(r.score);
+            if (!parEtudiant[r.user_id]) parEtudiant[r.user_id] = [];
+            parEtudiant[r.user_id].push((Number(r.score) / nbQParQcm[r.qcm_id]) * 20);
           });
-          const classement = Object.entries(parEtudiant).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+          const classement = Object.entries(parEtudiant)
+            .map(([userId, notes]) => [userId, notes.reduce((s, v) => s + v, 0) / notes.length])
+            .sort((a, b) => b[1] - a[1]).map(([id]) => id);
           const rang = classement.indexOf(uid);
           if (rang >= 0) setPositionKholle({ rang: rang + 1, total: classement.length });
         }
       }
 
-      // Position cumulée sur le semestre actif
+      // Position cumulée sur le semestre actif — même principe : moyenne des notes sur 20.
       const { data: paramSemestre } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
       if (paramSemestre?.valeur) {
         const { data: semainesSemestre } = await supabase.from('semaines_kholle').select('id').eq('semestre', paramSemestre.valeur);
         const idsSemaines = (semainesSemestre || []).map((s) => s.id);
         if (idsSemaines.length > 0) {
-          const { data: qcmsSemestre } = await supabase.from('qcms').select('id').in('semaine_kholle_id', idsSemaines);
-          const idsQcmsSemestre = (qcmsSemestre || []).map((q) => q.id);
-          if (idsQcmsSemestre.length > 0) {
-            const { data: resultatsSemestre } = await supabase.from('resultats_classement').select('user_id, score').in('qcm_id', idsQcmsSemestre);
+          const { data: qcmsSemestre } = await supabase.from('qcms').select('id, nb_questions').in('semaine_kholle_id', idsSemaines);
+          if ((qcmsSemestre || []).length > 0) {
+            const nbQParQcm = {};
+            qcmsSemestre.forEach((q) => { nbQParQcm[q.id] = q.nb_questions || 1; });
+            const { data: resultatsSemestre } = await supabase.from('resultats_classement').select('user_id, qcm_id, score').in('qcm_id', qcmsSemestre.map((q) => q.id));
             const parEtudiant = {};
             (resultatsSemestre || []).forEach((r) => {
-              parEtudiant[r.user_id] = (parEtudiant[r.user_id] || 0) + Number(r.score);
+              if (!parEtudiant[r.user_id]) parEtudiant[r.user_id] = [];
+              parEtudiant[r.user_id].push((Number(r.score) / nbQParQcm[r.qcm_id]) * 20);
             });
-            const classement = Object.entries(parEtudiant).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+            const classement = Object.entries(parEtudiant)
+              .map(([userId, notes]) => [userId, notes.reduce((s, v) => s + v, 0) / notes.length])
+              .sort((a, b) => b[1] - a[1]).map(([id]) => id);
             const rang = classement.indexOf(uid);
             if (rang >= 0) setPositionSemestre({ rang: rang + 1, total: classement.length });
           }

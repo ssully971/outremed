@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     );
     if (erreurReponses) return new Response(JSON.stringify({ error: "Enregistrement du détail impossible : " + erreurReponses.message }), { status: 400, headers: corsHeaders });
 
-    return new Response(JSON.stringify({ score, detail }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ score, detail, attempt_id: attempt.id }), { status: 200, headers: corsHeaders });
   } catch (err) {
     return new Response(JSON.stringify({ error: 'Erreur inattendue du serveur : ' + (err?.message || String(err)) }), { status: 500, headers: corsHeaders });
   }

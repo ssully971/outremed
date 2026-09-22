@@ -41,8 +41,10 @@ export default function QcmDetail() {
   const [carteOuverte, setCarteOuverte] = useState(null);
 
   const modeFige = qcm?.type_qcm === 'concours_blanc';
+  const estKholle = qcm?.is_kholle === true;
   const [choixDemande, setChoixDemande] = useState(!modeFige);
   const [modeChoisi, setModeChoisi] = useState(null);
+  const [popupKholleOuverte, setPopupKholleOuverte] = useState(false);
 
   const isConcours = modeFige || modeChoisi === 'concours';
   const peutPause = !modeFige && modeChoisi === 'entrainement';
@@ -60,6 +62,13 @@ export default function QcmDetail() {
       setQcm(qcmData);
       const dureeSec = (qcmData.duree_minutes || 30) * 60;
       setTimeLeft(dureeSec);
+
+      // Une kholle est toujours en mode concours, jamais de choix — remplacé par une popup
+      // d'information avant le démarrage du chrono (voir plus bas).
+      if (qcmData.is_kholle) {
+        setChoixDemande(false);
+        setModeChoisi('concours');
+      }
 
       const { data: monProfil } = await supabase.from('profiles').select('role, pseudo').eq('id', uid).single();
       const estAdmin = monProfil?.role === 'tuteur' || monProfil?.role === 'proprietaire';
@@ -143,7 +152,11 @@ export default function QcmDetail() {
           }
         }
       } else if (qcmData.type_qcm === 'concours_blanc') {
-        setDateDebut(new Date().toISOString());
+        if (qcmData.is_kholle) {
+          setPopupKholleOuverte(true); // dateDebut sera posé au clic sur "Commencer"
+        } else {
+          setDateDebut(new Date().toISOString());
+        }
       }
 
       setChargement(false);
@@ -152,7 +165,7 @@ export default function QcmDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (!userId || finished || chargement || dejaFait || apercuSeul || choixDemande) return;
+    if (!userId || finished || chargement || dejaFait || apercuSeul || choixDemande || popupKholleOuverte) return;
     localStorage.setItem(clePause, JSON.stringify({
       currentIndex, answers, validated, modeChoisi, dateDebut, tempsEcoule,
       dernierModif: Date.now(),
@@ -161,7 +174,7 @@ export default function QcmDetail() {
 
   // Chrono : décompte en concours, temps écoulé en entraînement
   useEffect(() => {
-    if (finished || chargement || dejaFait || choixDemande) return;
+    if (finished || chargement || dejaFait || choixDemande || popupKholleOuverte) return;
     if (isConcours) {
       if (timeLeft <= 0) { soumettreConcours(); return; }
       const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
@@ -169,7 +182,7 @@ export default function QcmDetail() {
     }
     const t = setTimeout(() => setTempsEcoule((s) => s + 1), 1000);
     return () => clearTimeout(t);
-  }, [timeLeft, tempsEcoule, isConcours, finished, chargement, choixDemande]);
+  }, [timeLeft, tempsEcoule, isConcours, finished, chargement, choixDemande, popupKholleOuverte]);
 
   const currentQuestion = questions[currentIndex];
 
@@ -275,12 +288,44 @@ export default function QcmDetail() {
       }
       localStorage.removeItem(clePause);
       setFinalScore(result.score);
-      construireCorrection();
+      await construireCorrectionDepuisServeur(result.attempt_id);
       setFinished(true);
     } catch {
       setErreur("Impossible de contacter le serveur pour enregistrer ta tentative. Vérifie ta connexion et réessaie.");
       soumissionEnvoyeeRef.current = false;
       setSoumissionEnCours(false);
+    }
+  }
+
+  // La correction d'un concours (kholle comprise) est reconstruite depuis attempt-detail —
+  // pas depuis items_visibles local — car ce dernier masque est_correct/correction pour tout
+  // ce qui n'est pas de l'entraînement, et masquait carrément la ligne pour une kholle une
+  // fois son créneau terminé (RLS temporelle sur `qcms`), d'où l'écran "tout faux" signalé.
+  async function construireCorrectionDepuisServeur(attemptId) {
+    if (!attemptId) { construireCorrection(); return; }
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/attempt-detail`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+        body: JSON.stringify({ attempt_id: attemptId }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || !result.detail) { construireCorrection(); return; }
+
+      const detail = result.detail.map((r) => {
+        const selected = r.items_selectionnes || [];
+        let statut = r.statut === 'partiel' ? 'partial' : r.statut;
+        if (selected.length === 0) statut = 'skipped';
+        return {
+          question: { enonce: r.enonce, lien: r.lien, items: (r.items || []).slice().sort((a, b) => (a.lettre || '').localeCompare(b.lettre || '')) },
+          selected,
+          statut,
+        };
+      });
+      setDetailCorrection(detail);
+    } catch {
+      construireCorrection();
     }
   }
 
@@ -330,6 +375,11 @@ export default function QcmDetail() {
     setModeChoisi(mode);
     setChoixDemande(false);
     if (mode === 'concours') setDateDebut(new Date().toISOString());
+  }
+
+  function commencerKholle() {
+    setPopupKholleOuverte(false);
+    setDateDebut(new Date().toISOString());
   }
 
   function statutNav(q) {
@@ -413,8 +463,27 @@ export default function QcmDetail() {
           <div className="stats-grid" style={{ gridTemplateColumns: '1fr' }}>
             <div className="stat-box"><div className="stat-value">{dejaFait.score}/{qcm.nb_questions}</div><div className="stat-label">Ton score</div></div>
           </div>
-          <Link to="/qcm" className="btn btn-outline" style={{ textDecoration: 'none', display: 'inline-block' }}>Retour aux QCM</Link>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link to={`/resultats/${dejaFait.id}`} className="btn btn-primary" style={{ textDecoration: 'none' }}>Voir la correction</Link>
+            <Link to="/qcm" className="btn btn-outline" style={{ textDecoration: 'none' }}>Retour aux QCM</Link>
+          </div>
         </div>
+      </div>
+    );
+  }
+
+  // ===== POPUP D'INFORMATION KHOLLE (remplace l'écran de choix de mode) =====
+  if (estKholle && popupKholleOuverte) {
+    return (
+      <div className="container" style={{ maxWidth: 700, textAlign: 'center' }}>
+        <Link to="/qcm" className="home-btn" style={{ display: 'inline-flex' }}>← Retour aux QCM</Link>
+        <h1 style={{ color: 'var(--accent)', fontSize: '2.4rem', margin: '10px 0 0' }}>{qcm.titre}</h1>
+        <div className="card" style={{ marginTop: 24, textAlign: 'left' }}>
+          <p style={{ margin: '0 0 10px' }}><strong>{qcm.nb_questions} questions</strong></p>
+          <p style={{ margin: '0 0 10px' }}><strong>{qcm.duree_minutes || 30} minutes</strong> pour répondre</p>
+          <p style={{ margin: 0, color: 'var(--text-muted)' }}>Une fois le temps écoulé ou le QCM validé, tu ne pourras plus le refaire.</p>
+        </div>
+        <button className="btn" style={{ width: 220, marginTop: 24 }} onClick={commencerKholle}>Commencer</button>
       </div>
     );
   }

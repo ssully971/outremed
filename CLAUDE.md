@@ -131,6 +131,8 @@ sous-filière affichée.
 
 - `profils_publics` — profils sans données sensibles, lisible largement
 - `items_visibles` — items sans `est_correct`/`correction` pour l'affichage pendant un QCM
+  (sauf `type_qcm = 'entrainement'`) ; visible dès `now() >= kholle_debut` pour un QCM de
+  kholle, sans borne haute — voir section « Kholles » pour l'historique de ce point
 - `resultats_classement` — agrège les scores pour le classement
 
 ### Fonctions SQL (RPC)
@@ -170,6 +172,52 @@ masqué) ET au niveau de la page elle-même (redirection si accès direct par UR
   affichage, pas au niveau RLS — un étudiant technique pourrait deviner l'URL d'un QCM
   non-annale. Accepté comme compromis pour ne pas complexifier la sécurité (petit groupe
   de confiance).
+
+## Kholles — passation, correction, notation
+
+- Une kholle est toujours en mode concours (`QcmDetail.jsx` : `qcm.is_kholle` force
+  `choixDemande = false` et `modeChoisi = 'concours'` dès le chargement, jamais l'écran de
+  choix entraînement/concours). À la place, une popup d'information (nombre de questions,
+  durée, avertissement "tu ne pourras plus le refaire") s'affiche avant que le chrono ne
+  démarre — `commencerKholle()` ne pose `dateDebut` qu'au clic sur "Commencer", pour ne pas
+  décompter le temps pendant que la popup est affichée.
+- **La correction d'un concours (kholle comprise) est toujours reconstruite via la fonction
+  serveur `attempt-detail`** (`construireCorrectionDepuisServeur` dans `QcmDetail.jsx`),
+  jamais depuis les `items_visibles` chargés localement avant la passation. `grade-qcm`
+  renvoie donc `attempt_id` dans sa réponse pour permettre cet appel enchaîné. Raison : les
+  policies RLS sur `qcms`/`items_visibles` limitaient historiquement la visibilité d'une
+  kholle à sa fenêtre `[kholle_debut, kholle_fin]` — une fois la kholle terminée (le cas
+  normal juste après l'avoir passée), l'étudiant perdait l'accès aux questions et voyait
+  tout marqué faux. **La policy `qcms` et la vue `items_visibles` ont depuis été corrigées
+  (2026-09-21) pour rester visibles indéfiniment dès `now() >= kholle_debut`** (plus de borne
+  haute `<= kholle_fin`) — sans risque de fuite de réponses, `items_visibles` masque déjà
+  `est_correct`/`correction` (`NULL`) pour tout QCM qui n'est pas de type `entrainement`,
+  quelle que soit la fenêtre. Cette même borne haute cassait aussi le classement d'une kholle
+  archivée pour un étudiant (`Classement.jsx` interroge `qcms` directement, pas seulement la
+  vue) : tous les scores retombaient à 0 et les autres participants disparaissaient — corrigé
+  par le même changement de policy.
+- **La fonction planifiée `cloturer_kholles_expirees()` convertit chaque QCM d'une kholle
+  terminée en `type_qcm = 'entrainement', is_kholle = false`** (pour le rendre rejouable en
+  révision) dès que `semaine_kholle.fin < now()`, tout en conservant `semaine_kholle_id`. La
+  vue `resultats_classement` filtrait sur `is_kholle = true OR type_qcm = 'concours_blanc'` —
+  une fois ce passage à `entrainement` effectué, ses tentatives disparaissaient de la vue
+  (donc du classement) alors qu'elles restaient dans `attempts` (donc visibles dans
+  Statistiques.jsx, qui lit `attempts` directement, pas la vue). **Corrigé (2026-09-22)** en
+  ajoutant `OR q.semaine_kholle_id IS NOT NULL` à la clause `WHERE` de la vue — ce champ n'est
+  jamais touché par la conversion et reste le signal fiable "ce QCM a fait partie d'une
+  kholle", même après. Si `resultats_classement` est un jour retouché, garder ce `OR`.
+- **Notation d'une kholle à plusieurs QCM (un par matière)** : la note globale doit toujours
+  être la **moyenne** des scores ramenés sur 20 (`Number(score) / nb_questions * 20`), jamais
+  leur somme. Codifié dans `calculerClassements` (`Classement.jsx`), `chargerClassementApercu`
+  (`Accueil.jsx`), `detailSession` (`Statistiques.jsx`) et `positionKholle`/`positionSemestre`
+  (`MesStats.jsx`) — si un nouvel écran affiche un score de kholle combiné, reproduire ce
+  pattern plutôt que sommer les `attempts.score` bruts.
+- `Classement.jsx` a un panneau admin (tuteur/proprietaire) pour une portée (semaine de
+  kholle ou concours) : "Exclure" (via `exclusions_classement`, masque du classement sans
+  toucher aux données) et **"Supprimer le résultat"** (supprime réellement la ou les lignes
+  `attempts` du/des étudiant(s) sélectionné(s) sur cette portée — irréversible, pour un
+  résultat injustifié comme un 0 par absence). La policy `DELETE` sur `attempts` autorise
+  désormais `auth.uid() = user_id` **ou** `mon_role() in ('tuteur','proprietaire')`.
 
 ## Fonctions serveur (Edge Functions)
 

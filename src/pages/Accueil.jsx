@@ -24,7 +24,7 @@ export default function Accueil() {
   const [progressionParMatiere, setProgressionParMatiere] = useState([]);
   const [classementApercu, setClassementApercu] = useState(null);
   const [monId, setMonId] = useState(null);
-  const [idsQcmsSemaineActuelle, setIdsQcmsSemaineActuelle] = useState([]);
+  const [qcmsSemaineActuelle, setQcmsSemaineActuelle] = useState([]);
 
   const [comptesAActiver, setComptesAActiver] = useState([]);
   const [equipeTuteurs, setEquipeTuteurs] = useState([]);
@@ -125,11 +125,9 @@ export default function Accueil() {
               return { titre: q.titre, matiere: infoMatiere.nom, couleur: infoMatiere.couleur, emoji: infoMatiere.emoji, qcmId: q.id, fait: !!tentative, score: tentative?.score, nb_questions: q.nb_questions };
             });
             setQcmsKholleDetail(detail);
-
-            const idsQcmsSemaine = (qcmsSemaine || []).map((q) => q.id);
-            setIdsQcmsSemaineActuelle(idsQcmsSemaine);
+            setQcmsSemaineActuelle(qcmsSemaine || []);
             if (p.afficher_position_classement) {
-              await chargerClassementApercu(idsQcmsSemaine, uid);
+              await chargerClassementApercu(qcmsSemaine || [], uid);
             }
           }
         }
@@ -248,14 +246,21 @@ export default function Accueil() {
     setComptesAActiver((prev) => prev.filter((e) => e.id !== etudiantId));
   }
 
-  async function chargerClassementApercu(idsQcmsSemaine, uid) {
-    if (!idsQcmsSemaine || idsQcmsSemaine.length === 0) { setClassementApercu({ top: [], monRang: null, total: 0 }); return; }
-    const { data: resultats } = await supabase.from('resultats_classement').select('user_id, score').in('qcm_id', idsQcmsSemaine);
+  // qcmsSemaine : [{id, nb_questions}] — la note de la kholle est la MOYENNE des scores de
+  // chaque QCM ramenés sur 20, jamais leur somme (une kholle a souvent un QCM par matière).
+  async function chargerClassementApercu(qcmsSemaine, uid) {
+    if (!qcmsSemaine || qcmsSemaine.length === 0) { setClassementApercu({ top: [], monRang: null, total: 0 }); return; }
+    const nbQuestionsParQcm = {};
+    qcmsSemaine.forEach((q) => { nbQuestionsParQcm[q.id] = q.nb_questions || 1; });
+    const { data: resultats } = await supabase.from('resultats_classement').select('user_id, qcm_id, score').in('qcm_id', qcmsSemaine.map((q) => q.id));
     const { data: pseudos } = await supabase.from('profils_publics').select('id, pseudo').eq('role', 'etudiant');
     const parEtudiant = {};
-    (resultats || []).forEach((r) => { parEtudiant[r.user_id] = (parEtudiant[r.user_id] || 0) + Number(r.score); });
+    (resultats || []).forEach((r) => {
+      if (!parEtudiant[r.user_id]) parEtudiant[r.user_id] = [];
+      parEtudiant[r.user_id].push((Number(r.score) / nbQuestionsParQcm[r.qcm_id]) * 20);
+    });
     const classement = Object.entries(parEtudiant)
-      .map(([userId, total]) => ({ userId, total, pseudo: (pseudos || []).find((p2) => p2.id === userId)?.pseudo || '—' }))
+      .map(([userId, notes]) => ({ userId, total: (notes.reduce((s, v) => s + v, 0) / notes.length).toFixed(1), pseudo: (pseudos || []).find((p2) => p2.id === userId)?.pseudo || '—' }))
       .sort((a, b) => b.total - a.total);
     const rang = classement.findIndex((c) => c.userId === uid);
     setClassementApercu({ top: classement.slice(0, 3), monRang: rang >= 0 ? rang + 1 : null, total: classement.length });
@@ -265,7 +270,7 @@ export default function Accueil() {
     const nouvelleValeur = !profil.afficher_position_classement;
     await supabase.from('profiles').update({ afficher_position_classement: nouvelleValeur }).eq('id', profil.id);
     setProfil((prev) => ({ ...prev, afficher_position_classement: nouvelleValeur }));
-    if (nouvelleValeur) await chargerClassementApercu(idsQcmsSemaineActuelle, monId);
+    if (nouvelleValeur) await chargerClassementApercu(qcmsSemaineActuelle, monId);
   }
 
   function decompteKholle() {
