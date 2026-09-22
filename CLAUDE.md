@@ -80,6 +80,17 @@ facultatives ont leur propre classement (par matière/par kholle) mais n'aliment
 classement général du semestre, qui ne compte que les matières obligatoires de la
 sous-filière affichée.
 
+**`profil_sous_filieres`, `profil_matieres` et `exclusions_classement` sont lisibles par
+n'importe quel compte authentifié (`lecture_auth`), pas seulement le propriétaire de la
+ligne ou un tuteur/proprietaire** — corrigé le 2026-09-22 après un bug où un étudiant
+consultant le classement (y compris ses propres archives) ne voyait que son propre nom avec
+un score à 0 : `Classement.jsx` a besoin de la liste complète des membres d'une sous-filière
+(et de leurs exclusions/`compte_classement`) pour construire le classement de **n'importe
+qui**, pas seulement de l'utilisateur connecté — une policy `profile_id = auth.uid() OR
+tuteur/proprietaire` ne renvoie donc que sa propre ligne à un étudiant, vidant le reste du
+classement. L'écriture (INSERT/UPDATE/DELETE) reste réservée à `mon_role() in
+('tuteur','proprietaire')`.
+
 ## Base de données — tables principales
 
 - `profiles` — comptes (role, categorie_compte, statut_compte, essai_fin, compte_actif,
@@ -212,6 +223,13 @@ masqué) ET au niveau de la page elle-même (redirection si accès direct par UR
   (`Accueil.jsx`), `detailSession` (`Statistiques.jsx`) et `positionKholle`/`positionSemestre`
   (`MesStats.jsx`) — si un nouvel écran affiche un score de kholle combiné, reproduire ce
   pattern plutôt que sommer les `attempts.score` bruts.
+- **Le classement général du semestre (`chargerSemestre` dans `Classement.jsx`) n'inclut que
+  les kholles déjà ouvertes** (`kholle_debut <= now()`) : une kholle programmée mais pas
+  encore commencée n'a par définition aucune tentative, donc `calculerClassements` la
+  zero-remplissait pour tout le monde et tirait injustement la moyenne du semestre vers le
+  bas dès qu'une future semaine de kholle existait (bug corrigé le 2026-09-22, ex: moyenne
+  à 16,5 sur l'unique kholle faite affichée à 11 sur le semestre à cause d'une 2e kholle pas
+  encore ouverte incluse dans le calcul).
 - `Classement.jsx` a un panneau admin (tuteur/proprietaire) pour une portée (semaine de
   kholle ou concours) : "Exclure" (via `exclusions_classement`, masque du classement sans
   toucher aux données) et **"Supprimer le résultat"** (supprime réellement la ou les lignes

@@ -105,9 +105,13 @@ export default function Classement() {
       const { data: sems } = await supabase.from('semaines_kholle').select('id').eq('semestre', semestreActif);
       const semaineIds = (sems || []).map((s) => s.id);
       if (semaineIds.length === 0) { setQcmsSemestre([]); setAttemptsSemestre([]); return; }
-      const { data: qcms } = await supabase.from('qcms').select('*').in('semaine_kholle_id', semaineIds);
-      setQcmsSemestre(qcms || []);
-      const { data: att } = await supabase.from('resultats_classement').select('*').in('qcm_id', (qcms || []).map((q) => q.id));
+      const { data: qcmsBrut } = await supabase.from('qcms').select('*').in('semaine_kholle_id', semaineIds);
+      // Une kholle pas encore ouverte ne doit pas peser dans la moyenne du semestre (elle
+      // n'a par définition aucune tentative, ce qui tirerait tout le monde vers 0).
+      const maintenant = new Date();
+      const qcms = (qcmsBrut || []).filter((q) => !q.kholle_debut || new Date(q.kholle_debut) <= maintenant);
+      setQcmsSemestre(qcms);
+      const { data: att } = await supabase.from('resultats_classement').select('*').in('qcm_id', qcms.map((q) => q.id));
       setAttemptsSemestre(att || []);
     }
     chargerSemestre();
