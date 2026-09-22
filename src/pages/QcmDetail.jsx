@@ -241,6 +241,19 @@ export default function QcmDetail() {
     });
 
     const tempsPasse = Math.floor((Date.now() - debutSession) / 1000);
+
+    // Une révision d'ancienne kholle (semaine_kholle_id encore renseigné après cloture) ne
+    // doit jamais créer de nouvelle ligne attempts : ça pourrait polluer le classement de la
+    // kholle d'origine avec un score potentiellement re-choisi librement en révision. Le score
+    // officiel de la kholle reste celui enregistré via grade-qcm pendant le créneau réel.
+    if (qcm?.semaine_kholle_id) {
+      localStorage.removeItem(clePause);
+      setFinalScore(score);
+      construireCorrection();
+      setFinished(true);
+      return;
+    }
+
     const { data: attempt, error: erreurAttempt } = await supabase
       .from('attempts').insert({ qcm_id: id, user_id: userId, score, temps_passe_secondes: tempsPasse }).select().single();
 
