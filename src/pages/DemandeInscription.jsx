@@ -1,0 +1,107 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+
+function Logo({ theme, height = 32 }) {
+  return (
+    <img
+      src={theme === 'dark' ? '/logo-dark.png' : '/logo-light.png'}
+      alt="Outremed"
+      style={{ height, width: 'auto', display: 'block' }}
+    />
+  );
+}
+
+export default function DemandeInscription() {
+  const [theme] = useState(() => localStorage.getItem('outremed_theme_landing') || 'dark');
+  const [email, setEmail] = useState('');
+  const [pseudo, setPseudo] = useState('');
+  const [nomComplet, setNomComplet] = useState('');
+  const [erreur, setErreur] = useState('');
+  const [envoi, setEnvoi] = useState(false);
+  const [envoye, setEnvoye] = useState(false);
+
+  async function soumettre(e) {
+    e.preventDefault();
+    setErreur('');
+    setEnvoi(true);
+
+    let res, result;
+    try {
+      res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/demande-inscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ email, pseudo, nom_complet: nomComplet }),
+      });
+      result = await res.json().catch(() => ({}));
+    } catch {
+      setEnvoi(false);
+      setErreur("Impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
+      return;
+    }
+
+    setEnvoi(false);
+    if (!res.ok) { setErreur(result.error || 'Une erreur est survenue.'); return; }
+    setEnvoye(true);
+  }
+
+  return (
+    <div className="landing-page">
+      <nav className="landing-navbar">
+        <Link to="/" className="brand-lockup" style={{ textDecoration: 'none' }}>
+          <Logo theme={theme} height={52} />
+        </Link>
+      </nav>
+
+      <div className="login-card-wrap">
+        <div className="card" style={{ width: '100%', maxWidth: 440, boxShadow: '0 25px 60px -20px rgba(0,0,0,0.4)' }}>
+          <Link to="/" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.82rem', textDecoration: 'none', marginBottom: 18, display: 'inline-block' }}>← Retour</Link>
+
+          {envoye ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>✅</div>
+              <h2 style={{ margin: '0 0 8px' }}>Demande envoyée</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                Un tuteur va vérifier ta demande. Tu recevras un email d'invitation à l'adresse
+                indiquée une fois ton compte validé.
+              </p>
+              <Link to="/" className="btn btn-outline" style={{ textDecoration: 'none', display: 'inline-block', marginTop: 12 }}>Retour à l'accueil</Link>
+            </div>
+          ) : (
+            <>
+              <h2 style={{ margin: '0 0 4px', textAlign: 'center' }}>Demander un accès</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 26, textAlign: 'center' }}>
+                Un tuteur vérifiera ta demande avant de t'envoyer une invitation par email.
+              </p>
+
+              <form onSubmit={soumettre}>
+                <div className="field">
+                  <label htmlFor="email">Adresse e-mail</label>
+                  <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                </div>
+                <div className="field">
+                  <label htmlFor="pseudo">Pseudo souhaité</label>
+                  <input id="pseudo" value={pseudo} onChange={(e) => setPseudo(e.target.value)} required />
+                </div>
+                <div className="field">
+                  <label htmlFor="nomComplet">Nom complet</label>
+                  <input id="nomComplet" value={nomComplet} onChange={(e) => setNomComplet(e.target.value)} required />
+                  <p className="field-hint">Sert uniquement à la vérification manuelle par un tuteur.</p>
+                </div>
+
+                {erreur && <div className="error-msg">{erreur}</div>}
+
+                <button className="btn btn-primary" style={{ width: '100%' }} type="submit" disabled={envoi}>
+                  {envoi ? 'Envoi...' : 'Envoyer ma demande →'}
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

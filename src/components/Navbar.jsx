@@ -76,6 +76,12 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', fermerSiExterieur);
   }, []);
 
+  function ouvrirEspaceSecret() {
+    if ((profil.role === 'tuteur' || profil.role === 'proprietaire') && location.pathname === '/accueil') {
+      navigate('/annexe');
+    }
+  }
+
   async function seDeconnecter() {
     localStorage.removeItem('outremed_session_token');
     await supabase.auth.signOut();
@@ -122,7 +128,7 @@ export default function Navbar() {
 
   return (
     <nav className="navbar">
-      <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="logo" onDoubleClick={ouvrirEspaceSecret} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <img
           src={(profil.theme_pref || 'dark') === 'dark' ? '/logo-dark.png' : '/logo-light.png'}
           alt="Outremed"
@@ -154,6 +160,7 @@ export default function Navbar() {
                 <Link to="/qcm/gerer" className="dropdown-item">Gérer les QCM</Link>
                 <Link to="/statistiques" className="dropdown-item">Statistiques</Link>
                 <Link to="/comptes" className="dropdown-item">Comptes</Link>
+                <Link to="/demandes-inscription" className="dropdown-item">Demandes d'inscription</Link>
                 <Link to="/filieres" className="dropdown-item">Filières</Link>
                 <Link to="/historiques" className="dropdown-item">Historique</Link>
               </div>
@@ -202,6 +209,7 @@ export default function Navbar() {
                 <Link to="/qcm/gerer" className={lienClasse('/qcm/gerer')}>Gérer les QCM</Link>
                 <Link to="/statistiques" className={lienClasse('/statistiques')}>Statistiques</Link>
                 <Link to="/comptes" className={lienClasse('/comptes')}>Comptes</Link>
+                <Link to="/demandes-inscription" className={lienClasse('/demandes-inscription')}>Demandes d'inscription</Link>
                 <Link to="/filieres" className={lienClasse('/filieres')}>Filières</Link>
                 <Link to="/historiques" className={lienClasse('/historiques')}>Historique</Link>
               </>

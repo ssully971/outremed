@@ -24,6 +24,17 @@ import MesStats from './pages/MesStats';
 import FicheTuteur from './pages/FicheTuteur';
 import GestionFilieres from './pages/GestionFilieres';
 import ChoisirFiliere from './pages/ChoisirFiliere';
+import AnnexeListeQcm from './pages/AnnexeListeQcm';
+import AnnexeCreationQcm from './pages/AnnexeCreationQcm';
+import AnnexeGestionQcm from './pages/AnnexeGestionQcm';
+import AnnexeEditionQcm from './pages/AnnexeEditionQcm';
+import AnnexeQcmDetail from './pages/AnnexeQcmDetail';
+import AnnexeMesStats from './pages/AnnexeMesStats';
+import AnnexeCarnetErreurs from './pages/AnnexeCarnetErreurs';
+import AnnexeStats from './pages/AnnexeStats';
+import AnnexeHistorique from './pages/AnnexeHistorique';
+import DemandeInscription from './pages/DemandeInscription';
+import DemandesInscription from './pages/DemandesInscription';
 import './styles/theme.css';
 
 function Layout() {
@@ -42,6 +53,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/definir-mot-de-passe" element={<DefinirMotDePasse />} />
         <Route path="/choisir-filiere" element={<ChoisirFiliere />} />
+        <Route path="/demande-inscription" element={<DemandeInscription />} />
 
         <Route element={<Layout />}>
           <Route path="/accueil" element={<Accueil />} />
@@ -65,6 +77,16 @@ function App() {
           <Route path="/mes-stats" element={<MesStats />} />
           <Route path="/tuteurs/:id" element={<FicheTuteur />} />
           <Route path="/filieres" element={<GestionFilieres />} />
+          <Route path="/annexe" element={<AnnexeListeQcm />} />
+          <Route path="/annexe/qcm/nouveau" element={<AnnexeCreationQcm />} />
+          <Route path="/annexe/qcm/gerer" element={<AnnexeGestionQcm />} />
+          <Route path="/annexe/qcm/:id/modifier" element={<AnnexeEditionQcm />} />
+          <Route path="/annexe/qcm/:id" element={<AnnexeQcmDetail />} />
+          <Route path="/annexe/mes-stats" element={<AnnexeMesStats />} />
+          <Route path="/annexe/carnet-erreurs" element={<AnnexeCarnetErreurs />} />
+          <Route path="/annexe/stats" element={<AnnexeStats />} />
+          <Route path="/annexe/historique" element={<AnnexeHistorique />} />
+          <Route path="/demandes-inscription" element={<DemandesInscription />} />
         </Route>
       </Routes>
     </BrowserRouter>

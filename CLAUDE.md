@@ -237,6 +237,110 @@ masqué) ET au niveau de la page elle-même (redirection si accès direct par UR
   résultat injustifié comme un 0 par absence). La policy `DELETE` sur `attempts` autorise
   désormais `auth.uid() = user_id` **ou** `mon_role() in ('tuteur','proprietaire')`.
 
+## Espace secret tuteurs — "Annexe QCM"
+
+Ajouté le 2026-09-22 : un espace caché, réservé à `tuteur`/`proprietaire`, pour créer et se
+passer des QCM entre eux, complètement séparé de l'espace étudiant. **Déclenchement** :
+double-clic sur le logo dans [Navbar.jsx](src/components/Navbar.jsx) (`ouvrirEspaceSecret()`),
+actif uniquement depuis `/accueil` pour un compte tuteur/propriétaire — aucun lien visible
+ailleurs dans la navigation. Reprend l'emplacement de l'ancienne easter-egg « EspacePerso »
+(double-clic sur le logo, supprimée le 2026-09-13) sans rapport fonctionnel avec elle.
+
+**Schéma dédié**, tables préfixées `annexe_` (`annexe_matieres`, `annexe_qcms`,
+`annexe_questions`, `annexe_items`, `annexe_attempts`, `annexe_attempt_answers`) + vue
+`annexe_items_visibles` (masque `est_correct`/`correction` hors `type_qcm='entrainement'`) —
+entièrement indépendant des tables `matieres`/`qcms`/`questions`/`items`/`attempts` de
+l'espace étudiant, aucune jointure entre les deux mondes. RLS : `annexe_matieres`/
+`annexe_qcms`/`annexe_questions`/`annexe_items` en lecture/écriture totale pour tout
+tuteur/proprietaire (pool partagé, décision actée : n'importe qui peut modifier/supprimer le
+contenu de n'importe qui) ; `annexe_attempts`/`annexe_attempt_answers` personnels
+(`user_id = auth.uid()`). **Point de vigilance rappelé de l'audit de sécurité du 2026-09-22** :
+l'INSERT direct sur `annexe_attempts` n'est autorisé que pour `type_qcm='entrainement'` — un
+`concours_blanc` doit obligatoirement passer par l'edge function `grade-qcm-annexe` (service
+role), pour ne pas réintroduire la faille de fabrication de score corrigée le même jour sur
+`attempts`. Toute nouvelle table de tentatives doit reproduire cette même restriction dès sa
+création plutôt que de la découvrir après coup.
+
+Contrairement à `items_visibles` côté étudiant, le masquage de `annexe_items_visibles` **n'est
+pas une frontière de sécurité réelle** : tout accesseur de cet espace est déjà tuteur/
+proprietaire avec accès RLS direct et permanent à `annexe_items` brute (pas de rôle
+intermédiaire moins privilégié comme un étudiant). Conséquence pratique : aucune edge function
+équivalente à `attempt-detail`/`revision-erreurs` n'a été nécessaire — la correction après un
+concours (`AnnexeQcmDetail.jsx`, `construireCorrectionDepuisItemsReels`) et le carnet d'erreurs
+(`AnnexeCarnetErreurs.jsx`) relisent directement `annexe_items` côté client une fois la
+tentative enregistrée.
+
+Pages : `AnnexeListeQcm.jsx` (`/annexe`, landing, statut jamais fait/en pause/fait — la
+détection « en pause » utilise la clé localStorage `outremed_annexe_progression_${id}_${userId}`,
+volontairement différente de `outremed_progression_${id}_${userId}` du site étudiant),
+`AnnexeCreationQcm.jsx`/`AnnexeGestionQcm.jsx`/`AnnexeEditionQcm.jsx` (entraînement/concours
+blanc uniquement, jamais de kholle, publication toujours immédiate — pas de statut « à
+vérifier »), `AnnexeQcmDetail.jsx` (prise de QCM, réutilise tel quel
+[ImportJsonQcm.jsx](src/components/ImportJsonQcm.jsx) et
+[ImageEnonceUpload.jsx](src/components/ImageEnonceUpload.jsx)/
+[uploadImage.js](src/lib/uploadImage.js), génériques par callback/props, aucune référence à
+une table), `AnnexeMesStats.jsx`/`AnnexeCarnetErreurs.jsx` (personnels, pas de classement dans
+cet espace). Toutes les autres pages (`QcmDetail.jsx`, `ListeQcm.jsx`, `CreationQcm.jsx`,
+`EditionQcm.jsx`, `GestionQcm.jsx`, `MesStats.jsx`) sont dupliquées plutôt que réutilisées
+paramétrées : chaque appel `supabase.from('...')` y est un littéral non paramétrable, sans
+mécanisme existant pour injecter un nom de table alternatif — refactoriser ce couplage pour un
+partage réel serait un chantier à part, risqué sur du code déjà durci (grading, RLS).
+
+**Navigation mobile (ajouté le 2026-09-22)** : `AnnexeNav.jsx` reproduit le pattern hamburger/
+`mobile-nav-panel` de [Navbar.jsx](src/components/Navbar.jsx) — la classe partagée
+`.nav-links` est cachée en dessous de 900px par une règle CSS globale
+(`theme.css`), donc toute barre de nav qui s'appuie sur cette classe **doit** prévoir son
+propre bouton `.hamburger-btn` + panneau mobile, sinon elle disparaît purement et simplement
+sur mobile sans rien pour la remplacer (bug initial corrigé ce jour). Attention à ne jamais
+donner `position: sticky` à ce genre de barre secondaire : `.navbar` (utilisé par le vrai
+Navbar juste au-dessus dans le DOM, puisque les pages `/annexe/*` restent dans le même
+`<Layout>`) est déjà sticky en haut — dupliquer `top: 0` sur `AnnexeNav` ferait chevaucher les
+deux barres au scroll.
+
+**Sous-matières** : `annexe_matieres.parent_id` (self-FK, `on delete cascade`) permet un
+niveau d'imbrication ; une matière avec `parent_id is null` est une matière de premier niveau,
+une sous-matière y référence son parent. Un QCM peut être rattaché indifféremment à une
+matière de premier niveau ou à une sous-matière (`annexe_qcms.matiere_id` reste une FK plate
+vers `annexe_matieres`, pas de distinction de type) — `AnnexeListeQcm.jsx` regroupe l'affichage
+par matière top-level puis imbrique une sous-section par sous-matière ayant des QCM.
+
+**Mode annale** : `annexe_qcms.is_annale` (booléen, indépendant de `type_qcm`, même pattern que
+`qcms.is_annale` côté étudiant) — une annale reste `type_qcm='entrainement'` en base ; le
+nombre de questions et d'items reste éditable à la création (seul `concours_blanc` fige
+`nb_questions` à 20 via `nbFixe` dans `AnnexeCreationQcm.jsx`).
+
+**`annexe_historique_qcm`** : journal partagé (création/modification/suppression de QCM),
+lecture/écriture ouverte à tout tuteur/proprietaire (`AnnexeHistorique.jsx`) — volontairement
+sans la distinction « archivé »/propriétaire-seul de `historique_comptes`/`historique_qcm`
+côté étudiant, ce journal sert à la coordination entre tuteurs, pas à l'audit de sécurité.
+`qcm_id` est en `on delete set null` : l'entrée survit à la suppression du QCM qu'elle décrit
+(le `details` texte capture le titre au moment de l'action). `AnnexeStats.jsx` (« stats
+communes ») agrège séparément `annexe_qcms.cree_par`/`matiere_id` pour montrer qui a créé quoi
+et dans quelles matières — pas de classement, juste des compteurs, pour repérer les trous de
+couverture entre tuteurs.
+
+## Demandes d'inscription
+
+Ajouté le 2026-09-22 : le site n'a pas d'inscription libre (seuls tuteurs/propriétaire créent
+les comptes étudiants), mais un candidat sans compte peut soumettre une demande depuis
+`DemandeInscription.jsx` (route publique `/demande-inscription`, hors `<Layout>`, reliée depuis
+la page d'accueil [Login.jsx](src/pages/Login.jsx) — bouton dans le hero et lien sous le
+formulaire de connexion). La table `demandes_inscription` (`email`, `pseudo`, `nom_complet`,
+`statut` `en_attente`/`validee`/`rejetee`, `traite_par`, `traite_le`) **n'a aucune policy RLS
+INSERT ni de GRANT INSERT pour `authenticated`/`anon`** — la création passe exclusivement par
+l'edge function `demande-inscription` (service role), seule capable de vérifier côté serveur
+qu'aucun compte ni demande en attente n'existe déjà pour cet email (voir section Edge
+Functions). RLS SELECT/UPDATE réservées à `tuteur`/`proprietaire`.
+
+Côté admin, `DemandesInscription.jsx` (`/demandes-inscription`, lien dans le menu « Gérer » de
+[Navbar.jsx](src/components/Navbar.jsx) — desktop et mobile) liste les demandes (onglets « En
+attente » / « Historique »). **Valider** rappelle exactement le même appel à l'edge function
+`create-user` que [Comptes.jsx](src/pages/Comptes.jsx) (`creerCompte`) — même formulaire
+statut actif/essai gratuit, `role: 'etudiant'` forcé — puis marque la demande `validee` avec
+`traite_par`/`traite_le`. **Rejeter** ne fait qu'un `update` direct du statut (pas d'edge
+function nécessaire, action réservée par RLS). Aucune des deux actions ne supprime jamais la
+ligne : l'historique reste consultable indéfiniment.
+
 ## Fonctions serveur (Edge Functions)
 
 Toutes doivent avoir la gestion CORS (`corsHeaders` + réponse à `OPTIONS`) — **un oubli sur
@@ -244,6 +348,20 @@ Toutes doivent avoir la gestion CORS (`corsHeaders` + réponse à `OPTIONS`) —
 Tout appel `fetch()` côté client vers une fonction serveur doit être enveloppé dans un
 try/catch qui réinitialise l'état de chargement, sinon un bouton reste bloqué indéfiniment
 sur un échec réseau silencieux (bug rencontré et corrigé à plusieurs endroits).
+
+**Piège découvert le 2026-09-22, à ne plus reproduire** : une table créée via `CREATE TABLE`
+brut par `npx supabase db query --linked` (plutôt que par le dashboard/l'éditeur SQL Supabase)
+**n'hérite d'aucun GRANT** sur ses privilèges — ni pour `authenticated`, ni même pour
+`service_role`. Sans `GRANT ... TO service_role`, une edge function qui utilise le client
+`supabaseAdmin` (service role) reçoit une erreur `permission denied for table ...` **malgré**
+le service role bypassant RLS — RLS et GRANT sont deux couches indépendantes. Ce bug a cassé
+silencieusement `grade-qcm-annexe` dès sa création (jamais détecté faute de test en conditions
+réelles avec un vrai token) et a été trouvé en construisant `demande-inscription`, dont le
+premier appel a échoué de la même façon. **Toute nouvelle table doit systématiquement recevoir
+`grant select, insert, update, delete on <table> to authenticated;` (RLS filtre ensuite les
+lignes) et, si une edge function y touche, `grant ... to service_role;` en plus** — vérifiable
+via `select grantee, privilege_type from information_schema.role_table_grants where
+table_name = '...'`.
 
 - `create-user` — crée un compte (étudiant/tuteur), envoie l'invitation par email avec
   `redirectTo` dynamique (`window.location.origin`, jamais de `localhost` en dur), transmet
@@ -261,6 +379,17 @@ sur un échec réseau silencieux (bug rencontré et corrigé à plusieurs endroi
   Protection redondante côté DB : trigger `trg_tentative_unique` (BEFORE INSERT sur
   `attempts`) refuse aussi un doublon pour `concours_blanc`.
 - `attempt-detail`, `revision-erreurs` — lecture de détail, pas d'action sensible
+- `grade-qcm-annexe` — équivalent de `grade-qcm` pour l'espace secret tuteurs (tables
+  `annexe_*`), avec en plus une vérification de rôle explicite (`tuteur`/`proprietaire`) au
+  tout début — voir section « Espace secret tuteurs »
+- `demande-inscription` — **la seule fonction du projet volontairement appelée sans Bearer
+  token utilisateur** (le candidat n'a par définition pas encore de compte) ; le client y
+  envoie quand même `Authorization`/`apikey` avec la clé anon publique pour satisfaire la
+  passerelle Supabase (`verify_jwt`), qui exige un JWT valide même si la fonction elle-même ne
+  vérifie aucune session. Fait tout le travail sensible côté serveur : vérifie qu'aucun compte
+  `auth.users` n'existe déjà pour cet email (`auth.admin.listUsers` puis filtre côté fonction —
+  pas de recherche par email native dans l'API admin), qu'aucune `demandes_inscription`
+  `en_attente` n'existe pour cet email, puis insère. Voir section « Demandes d'inscription ».
 
 ## Contraintes de clé étrangère — historique important
 

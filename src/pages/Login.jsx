@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 
 function Logo({ theme, height = 32 }) {
@@ -180,6 +180,10 @@ export default function Login() {
             <button onClick={motDePasseOublie} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: 16, cursor: 'pointer', textDecoration: 'underline', padding: 0, display: 'block', margin: '16px auto 0' }}>
               Mot de passe oublié ?
             </button>
+
+            <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 18, marginBottom: 0 }}>
+              Pas encore de compte ? <Link to="/demande-inscription" style={{ color: 'var(--accent)' }}>Demande un accès</Link>
+            </p>
           </div>
         </div>
       ) : (
@@ -193,6 +197,7 @@ export default function Login() {
 
             <div className="hero-actions">
               <button className="btn btn-primary" onClick={() => setVue('connexion')}>Se connecter</button>
+              <Link to="/demande-inscription" className="btn btn-outline">Demander un accès</Link>
               {whatsapp && <a href={whatsapp} target="_blank" rel="noreferrer" className="btn btn-outline">Nous contacter 📞</a>}
             </div>
 
