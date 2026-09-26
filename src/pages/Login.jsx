@@ -17,6 +17,7 @@ export default function Login() {
   const [theme, setTheme] = useState(() => localStorage.getItem('outremed_theme_landing') || 'dark');
   const [whatsapp, setWhatsapp] = useState('');
   const [instagram, setInstagram] = useState('');
+  const [politiqueConfidentialite, setPolitiqueConfidentialite] = useState('');
 
   const [email, setEmail] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
@@ -50,10 +51,11 @@ export default function Login() {
 
   useEffect(() => {
     async function charger() {
-      const { data } = await supabase.from('parametres').select('cle, valeur').in('cle', ['whatsapp_contact', 'instagram_url']);
+      const { data } = await supabase.from('parametres').select('cle, valeur').in('cle', ['whatsapp_contact', 'instagram_url', 'politique_confidentialite_url']);
       (data || []).forEach((row) => {
         if (row.cle === 'whatsapp_contact') setWhatsapp(row.valeur || '');
         if (row.cle === 'instagram_url') setInstagram(row.valeur || '');
+        if (row.cle === 'politique_confidentialite_url') setPolitiqueConfidentialite(row.valeur || '');
       });
     }
     charger();
@@ -279,6 +281,12 @@ export default function Login() {
               </div>
             </div>
           </div>
+
+          {politiqueConfidentialite && (
+            <p style={{ textAlign: 'center', padding: '24px 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              <a href={politiqueConfidentialite} target="_blank" rel="noreferrer" style={{ color: 'var(--text-muted)' }}>Politique de confidentialité</a>
+            </p>
+          )}
         </>
       )}
     </div>

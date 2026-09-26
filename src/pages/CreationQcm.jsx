@@ -5,6 +5,7 @@ import { envoyerNotificationGroupe } from '../lib/notifier';
 import ImportJsonQcm from '../components/ImportJsonQcm';
 import CreerMatiereCoursModal from '../components/CreerMatiereCoursModal';
 import ImageEnonceUpload from '../components/ImageEnonceUpload';
+import { estMatiereActive } from '../lib/filiere';
 
 const ITEM_VIDE = () => ({ texte: '', est_correct: false, correction: '' });
 // cleLocale : identifiant purement client, sans rapport avec l'id réel en base — sert juste
@@ -40,6 +41,7 @@ export default function CreationQcm() {
   const [nbQuestions, setNbQuestions] = useState(20);
   const [nbItems, setNbItems] = useState(5);
   const [semestre, setSemestre] = useState('');
+  const [semestreActif, setSemestreActif] = useState('');
   const [publierMaintenant, setPublierMaintenant] = useState(true);
 
   const [creneauxKholleDisponibles, setCreneauxKholleDisponibles] = useState([]);
@@ -79,6 +81,8 @@ export default function CreationQcm() {
 
       const { data: paramQ } = await supabase.from('parametres').select('valeur').eq('cle', 'nb_questions_defaut').single();
       const { data: paramI } = await supabase.from('parametres').select('valeur').eq('cle', 'nb_items_defaut').single();
+      const { data: paramSem } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
+      setSemestreActif(paramSem?.valeur || '');
       if (paramQ?.valeur) {
         const n = Number(paramQ.valeur);
         setNbQuestions(n);
@@ -90,6 +94,7 @@ export default function CreationQcm() {
   }, []);
 
   const nbFixe = typeGeneral === 'kholle' || typeGeneral === 'concours_blanc';
+  const matiereSelectionnee = matieres.find((m) => m.id === matiereId);
 
   function changerNbQuestions(n) {
     setNbQuestions(n);
@@ -289,9 +294,18 @@ export default function CreationQcm() {
               Matière
               <button type="button" className="btn btn-ghost" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => setModalMatiereOuvert(true)}>+ Nouvelle matière</button>
             </label>
-            <select value={matiereId} onChange={(e) => { setMatiereId(e.target.value); setCoursId(''); }}>
+            <select
+              value={matiereId}
+              onChange={(e) => {
+                const nouvelleMatiereId = e.target.value;
+                setMatiereId(nouvelleMatiereId);
+                setCoursId('');
+                const m = matieres.find((mm) => mm.id === nouvelleMatiereId);
+                if (m?.semestre) setSemestre(semestreActif);
+              }}
+            >
               <option value="">— choisir —</option>
-              {matieres.filter((m) => m.actif !== false).map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
+              {matieres.filter((m) => m.actif !== false && estMatiereActive(m, semestreActif)).map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
             </select>
           </div>
 
@@ -387,8 +401,14 @@ export default function CreationQcm() {
           </div>
 
           <div className="field">
-            <label>Semestre (ex : 2025-S1)</label>
-            <input value={semestre} onChange={(e) => setSemestre(e.target.value)} placeholder="2025-S1" />
+            <label>Semestre {matiereSelectionnee?.semestre && '(verrouillé sur la matière)'}</label>
+            <input
+              value={semestre}
+              onChange={(e) => setSemestre(e.target.value)}
+              placeholder="2025-S1"
+              readOnly={!!matiereSelectionnee?.semestre}
+              disabled={!!matiereSelectionnee?.semestre}
+            />
           </div>
 
           {typeGeneral === 'kholle' ? (
@@ -412,7 +432,7 @@ export default function CreationQcm() {
           <CreerMatiereCoursModal
             mode="matiere"
             onFermer={() => setModalMatiereOuvert(false)}
-            onCree={async (nouvelle) => { await chargerMatieresEtCours(); setMatiereId(nouvelle.id); setCoursId(''); setModalMatiereOuvert(false); }}
+            onCree={async (nouvelle) => { await chargerMatieresEtCours(); setMatiereId(nouvelle.id); setCoursId(''); if (nouvelle.semestre) setSemestre(semestreActif); setModalMatiereOuvert(false); }}
           />
         )}
 
@@ -574,6 +594,13 @@ export default function CreationQcm() {
         <button className="btn btn-ghost" onClick={() => setEtape(1)}>← Retour</button>
         <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setEtape(3)}>Suivant : récapitulatif →</button>
       </div>
+
+      {!navOuverte && (
+        <div className="scroll-fab-group">
+          <button type="button" className="scroll-fab" title="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>↑</button>
+          <button type="button" className="scroll-fab" title="Bas de page" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}>↓</button>
+        </div>
+      )}
 
       {navOuverte && (
         <div className="nav-overlay open" onClick={(e) => e.target === e.currentTarget && setNavOuverte(false)}>

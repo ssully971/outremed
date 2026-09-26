@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { estMatiereActive } from '../lib/filiere';
 
 // Sélecteur modalité -> sous-filière(s) -> matières facultatives, avec récap avant validation.
 // Utilisé pour l'onboarding obligatoire d'un étudiant (ChoisirFiliere.jsx, `profileId` = son
-// propre id) et pour l'édition par un tuteur (FicheEtudiant.jsx, `profileId` = l'étudiant
-// affiché, `avertissementIrreversible` = false puisque le tuteur peut toujours revenir dessus).
-export default function SelecteurFiliere({ profileId, valeurInitiale, avertissementIrreversible = true, onApplique, onAnnuler }) {
-  const [etape, setEtape] = useState(1);
+// propre id), pour l'édition par un tuteur (FicheEtudiant.jsx, `profileId` = l'étudiant
+// affiché, `avertissementIrreversible` = false puisque le tuteur peut toujours revenir dessus),
+// et pour la reconfirmation périodique des facultatives (ChoisirFacultatives.jsx,
+// `facultativesSeulement` = true) : modalité/sous-filière restent figées (déjà choisies), seule
+// l'étape facultatives est affichée, sans écran de récapitulatif intermédiaire.
+export default function SelecteurFiliere({ profileId, valeurInitiale, avertissementIrreversible = true, facultativesSeulement = false, onApplique, onAnnuler }) {
+  const [etape, setEtape] = useState(facultativesSeulement ? 'facultatives-seules' : 1);
   const [chargement, setChargement] = useState(true);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState('');
@@ -15,6 +19,7 @@ export default function SelecteurFiliere({ profileId, valeurInitiale, avertissem
   const [sousFilieres, setSousFilieres] = useState([]);
   const [matieres, setMatieres] = useState([]);
   const [statutsMatieres, setStatutsMatieres] = useState([]);
+  const [semestreActif, setSemestreActif] = useState('');
 
   const [modaliteId, setModaliteId] = useState(valeurInitiale?.modaliteId || null);
   const [sousFiliereIds, setSousFiliereIds] = useState(valeurInitiale?.sousFiliereIds || []);
@@ -30,6 +35,8 @@ export default function SelecteurFiliere({ profileId, valeurInitiale, avertissem
       setMatieres(mats || []);
       const { data: sfm } = await supabase.from('sous_filiere_matieres').select('*');
       setStatutsMatieres(sfm || []);
+      const { data: param } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
+      setSemestreActif(param?.valeur || '');
       setChargement(false);
     }
     charger();
@@ -50,7 +57,10 @@ export default function SelecteurFiliere({ profileId, valeurInitiale, avertissem
     });
 
   const matieresObligatoires = matieres.filter((m) => statutsCalcules[m.id] === 'obligatoire');
-  const matieresFacultativesDisponibles = modaliteChoisie?.sans_facultatif ? [] : matieres.filter((m) => statutsCalcules[m.id] === 'facultative');
+  // Une facultative déjà cochée reste visible même hors-saison (sinon impossible de la revoir/
+  // décocher — tuteur sur FicheEtudiant.jsx comme étudiant sur ChoisirFacultatives.jsx) ; seules
+  // les nouvelles propositions sont limitées à la saison active.
+  const matieresFacultativesDisponibles = modaliteChoisie?.sans_facultatif ? [] : matieres.filter((m) => statutsCalcules[m.id] === 'facultative' && (facultativesCochees.includes(m.id) || estMatiereActive(m, semestreActif)));
 
   function basculerSousFiliere(id) {
     setSousFiliereIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -73,8 +83,12 @@ export default function SelecteurFiliere({ profileId, valeurInitiale, avertissem
       p_sous_filiere_ids: sousFiliereIds,
       p_matieres_facultatives_ids: facultativesCochees,
     });
+    if (error) { setEnCours(false); setErreur(error.message); return; }
+    // La RPC n'a pas connaissance du semestre — marqué séparément, à chaque confirmation
+    // réussie (onboarding initial, édition tuteur, ou reconfirmation dédiée) : les facultatives
+    // qui viennent d'être appliquées sont par définition à jour pour le semestre actif.
+    await supabase.from('profiles').update({ facultatives_confirmees_pour: semestreActif }).eq('id', profileId);
     setEnCours(false);
-    if (error) { setErreur(error.message); return; }
     onApplique?.();
   }
 
@@ -83,6 +97,32 @@ export default function SelecteurFiliere({ profileId, valeurInitiale, avertissem
 
   return (
     <div>
+      {etape === 'facultatives-seules' && (
+        <div>
+          <h3 style={{ marginTop: 0 }}>Matières facultatives de ce semestre</h3>
+          {matieresFacultativesDisponibles.length === 0 ? (
+            <p className="field-hint" style={{ marginBottom: 16 }}>Aucune matière facultative disponible ce semestre pour ta filière.</p>
+          ) : (
+            <>
+              <p className="field-hint" style={{ marginBottom: 16 }}>Coche celles que tu veux suivre ce semestre.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {matieresFacultativesDisponibles.map((m) => (
+                  <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <input type="checkbox" checked={facultativesCochees.includes(m.id)} onChange={() => basculerFacultative(m.id)} />
+                    {m.emoji ? `${m.emoji} ` : ''}{m.nom}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+          {erreur && <div className="error-msg">{erreur}</div>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+            {onAnnuler && <button className="btn btn-ghost" onClick={onAnnuler} disabled={enCours}>Annuler</button>}
+            <button className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={confirmer} disabled={enCours}>{enCours ? 'Enregistrement...' : 'Confirmer'}</button>
+          </div>
+        </div>
+      )}
+
       {etape === 1 && (
         <div>
           <h3 style={{ marginTop: 0 }}>Choisis ta modalité</h3>

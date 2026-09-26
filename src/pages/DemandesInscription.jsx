@@ -59,7 +59,7 @@ export default function DemandesInscription() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
         body: JSON.stringify({
-          email: demande.email, pseudo: pseudoFinal, role: 'etudiant',
+          email: demande.email, pseudo: pseudoFinal, role: 'etudiant', nom_complet: demande.nom_complet,
           statut_compte: statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin,
         }),
       });

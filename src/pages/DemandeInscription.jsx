@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabaseClient';
 
 function Logo({ theme, height = 32 }) {
   return (
@@ -20,6 +21,15 @@ export default function DemandeInscription() {
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
   const [envoye, setEnvoye] = useState(false);
+  const [politiqueConfidentialite, setPolitiqueConfidentialite] = useState('');
+
+  useEffect(() => {
+    async function charger() {
+      const { data } = await supabase.from('parametres').select('valeur').eq('cle', 'politique_confidentialite_url').single();
+      setPolitiqueConfidentialite(data?.valeur || '');
+    }
+    charger();
+  }, []);
 
   async function soumettre(e) {
     e.preventDefault();
@@ -109,6 +119,12 @@ export default function DemandeInscription() {
             </>
           )}
         </div>
+
+        {politiqueConfidentialite && (
+          <p style={{ textAlign: 'center', marginTop: 20, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            <a href={politiqueConfidentialite} target="_blank" rel="noreferrer" style={{ color: 'var(--text-muted)' }}>Politique de confidentialité</a>
+          </p>
+        )}
       </div>
     </div>
   );

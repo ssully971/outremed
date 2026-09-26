@@ -120,7 +120,10 @@ export default function ListeQcm() {
     const statut = statutQcm(qcm);
     return (
       <div className="qcm-card" style={{ '--card-color': matieres.find((m) => m.id === qcm.matiere_id)?.couleur || '#FF3EB5' }} onClick={() => navigate(`/qcm/${qcm.id}`)}>
-        <span className="mode-tag">{labelType(qcm)}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="mode-tag">{labelType(qcm)}</span>
+          {qcm.semestre && <span className="year-badge">{qcm.semestre.split('-')[0]}</span>}
+        </div>
         <h3>{qcm.titre}</h3>
         <div className="meta-row">
           <span>{qcm.nb_questions} questions</span>

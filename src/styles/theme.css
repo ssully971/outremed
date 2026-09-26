@@ -281,6 +281,8 @@ section { margin-bottom: 40px; }
 .qcm-card .meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px; }
 .qcm-card .score-line { font-size: 0.8rem; font-weight: 700; }
 
+.year-badge { font-size: 0.68rem; font-weight: 700; color: var(--text-muted); background: var(--bg-panel); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px; }
+
 .see-more-row { display: flex; justify-content: center; margin-top: 14px; }
 .see-more-btn { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 9px 20px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 6px; }
 .see-more-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -656,6 +658,10 @@ section { margin-bottom: 40px; }
 .nav-trigger-btn:hover { border-color: var(--accent); color: var(--accent); }
 .mini-progress { font-size: 0.78rem; color: var(--text-muted); }
 .mini-progress b { color: var(--success); }
+
+.scroll-fab-group { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 1500; }
+.scroll-fab { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main); font-size: 1.1rem; cursor: pointer; box-shadow: var(--shadow-md, 0 4px 14px rgba(0,0,0,0.15)); display: flex; align-items: center; justify-content: center; transition: var(--transition); }
+.scroll-fab:hover { border-color: var(--accent); color: var(--accent); }
 
 .nav-item.filled { background: var(--success-bg); border-color: var(--success); color: var(--success); }
 .nav-item.empty-warn { border-color: var(--error); }

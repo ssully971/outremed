@@ -111,11 +111,25 @@ export default function GestionQcm() {
 
   async function changerSemestreSelection() {
     if (selection.length === 0 || !nouveauSemestreSelection.trim()) return;
-    if (!/^\d{4}-S[12]$/.test(nouveauSemestreSelection.trim())) {
+    const cible = nouveauSemestreSelection.trim();
+    if (!/^\d{4}-S[12]$/.test(cible)) {
       alert('Le semestre doit être au format AAAA-S1 ou AAAA-S2 (ex : 2026-S1).');
       return;
     }
-    await supabase.from('qcms').update({ semestre: nouveauSemestreSelection.trim() }).in('id', selection);
+    // Une matière verrouillée sur un semestre (S1/S2) ne peut pas recevoir un QCM d'un autre
+    // semestre — sinon le QCM se retrouve daté "2026-S2" alors que sa matière n'existe qu'au S1.
+    const cibleLettre = cible.split('-')[1];
+    const conflits = selection
+      .map((id) => qcms.find((q) => q.id === id))
+      .filter((q) => {
+        const m = matieres.find((mm) => mm.id === q?.matiere_id);
+        return m?.semestre && m.semestre !== cibleLettre;
+      });
+    if (conflits.length > 0) {
+      alert(`Semestre incompatible pour ${conflits.length} QCM (matière verrouillée sur un autre semestre) : ${conflits.map((q) => q.titre).join(', ')}`);
+      return;
+    }
+    await supabase.from('qcms').update({ semestre: cible }).in('id', selection);
     setSelection([]);
     setNouveauSemestreSelection('');
     charger();
@@ -322,7 +336,7 @@ export default function GestionQcm() {
               {!qcm.publie && 'Brouillon'}{!qcm.publie && !qcm.visible && ' · '}{!qcm.visible && 'Masqué'}
             </div>
           </div>
-          <div className="qmr-type">{labelType(qcm)}</div>
+          <div className="qmr-type">{labelType(qcm)}{qcm.semestre && <span className="year-badge" style={{ marginLeft: 6 }}>{qcm.semestre.split('-')[0]}</span>}</div>
           <div className="qmr-count">{qcm.nb_questions} Q.</div>
           <div className="qmr-author">Par <b>{qcm.cree_par === monId ? 'Moi' : (profilsMap[qcm.cree_par] || '—')}</b></div>
           <span className={`status-tag ${qcm.verifie ? 'status-validated' : 'status-pending'}`}>
@@ -432,7 +446,7 @@ export default function GestionQcm() {
                     </div>
                   </div>
                   {s.questions && (
-                    <Link to={`/qcm/${s.qcm_id}?q=${s.questions.ordre}`} style={{ fontSize: '0.78rem', color: 'var(--accent)', textDecoration: 'none' }}>Voir la question →</Link>
+                    <Link to={`/qcm/${s.qcm_id}/modifier?q=${s.questions.ordre}`} style={{ fontSize: '0.78rem', color: 'var(--accent)', textDecoration: 'none' }}>Voir la question →</Link>
                   )}
                 </div>
               ))}

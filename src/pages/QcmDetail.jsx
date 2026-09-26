@@ -491,6 +491,7 @@ export default function QcmDetail() {
       <div className="container" style={{ maxWidth: 700, textAlign: 'center' }}>
         <Link to="/qcm" className="home-btn" style={{ display: 'inline-flex' }}>← Retour aux QCM</Link>
         <h1 style={{ color: 'var(--accent)', fontSize: '2.4rem', margin: '10px 0 0' }}>{qcm.titre}</h1>
+        {qcm.semestre && <span className="year-badge">{qcm.semestre.split('-')[0]}</span>}
         <div className="card" style={{ marginTop: 24, textAlign: 'left' }}>
           <p style={{ margin: '0 0 10px' }}><strong>{qcm.nb_questions} questions</strong></p>
           <p style={{ margin: '0 0 10px' }}><strong>{qcm.duree_minutes || 30} minutes</strong> pour répondre</p>
@@ -591,6 +592,7 @@ export default function QcmDetail() {
       <div className="container" style={{ maxWidth: 700, textAlign: 'center' }}>
         <Link to="/qcm" className="home-btn" style={{ display: 'inline-flex' }}>← Retour aux QCM</Link>
         <h1 style={{ color: 'var(--accent)', fontSize: '2.4rem', margin: '10px 0 0' }}>{qcm.titre}</h1>
+        {qcm.semestre && <span className="year-badge">{qcm.semestre.split('-')[0]}</span>}
         <p style={{ color: 'var(--text-muted)', margin: '10px 0' }}>
           {qcm.nb_questions} Questions à Choix Multiples · Temps estimé {dureeEstimee} min
           {meilleurScore !== null && <> · Meilleur score : <strong style={{ color: 'var(--accent)' }}>{meilleurScore}</strong></>}

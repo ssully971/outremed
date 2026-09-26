@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { origineFiable } from '../_shared/origine.ts';
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL'),
@@ -10,21 +11,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
-const ORIGINE_CANONIQUE = 'https://outremed.vercel.app';
-
-// Le tuteur/propriétaire peut se trouver sur une URL de déploiement Vercel différente de
-// l'alias stable (preview, ancien lien favori, etc.) — si le redirect_to envoyé à Supabase ne
-// correspond pas exactement à l'allowlist configurée côté Auth, Supabase l'ignore et retombe
-// silencieusement sur site_url SANS le chemin /definir-mot-de-passe, envoyant l'étudiant sur
-// la page d'accueil au lieu de la page de création de mot de passe (bug constaté le
-// 2026-09-22). On ne fait donc jamais confiance à l'origine envoyée par le client au-delà de
-// ce qu'on sait déjà accepté par Supabase.
-function origineFiable(redirectUrl) {
-  if (redirectUrl === ORIGINE_CANONIQUE) return redirectUrl;
-  if (redirectUrl && redirectUrl.startsWith('http://localhost')) return redirectUrl;
-  return ORIGINE_CANONIQUE;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -47,7 +33,7 @@ Deno.serve(async (req) => {
       .eq('id', caller.user.id)
       .single();
 
-    const { email, pseudo, role, statut_compte, essai_semaines, redirect_url, categorie_compte } = await req.json();
+    const { email, pseudo, role, statut_compte, essai_semaines, redirect_url, categorie_compte, nom_complet } = await req.json();
 
     if (!email || !pseudo || !role) {
       return new Response(JSON.stringify({ error: 'Email, pseudo et rôle requis' }), { status: 400, headers: corsHeaders });
@@ -86,6 +72,8 @@ Deno.serve(async (req) => {
       id: newUser.user.id,
       pseudo,
       role,
+      email,
+      nom_complet: nom_complet || null,
       statut_compte: statut_compte || 'actif',
       essai_fin: essaiFin,
       cree_par: caller.user.id,

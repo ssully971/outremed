@@ -67,8 +67,10 @@ export default function PopupMatieres({ onFermer }) {
     setSemestreEdition(m.semestre || '');
   }
 
-  async function enregistrerEdition(m) {
-    await supabase.from('matieres').update({ nom: nomEdition, semestre: semestreEdition || null }).eq('id', m.id);
+  async function enregistrerEdition(m, overrides = {}) {
+    const nom = overrides.nom !== undefined ? overrides.nom : nomEdition;
+    const semestre = overrides.semestre !== undefined ? overrides.semestre : semestreEdition;
+    await supabase.from('matieres').update({ nom, semestre: semestre || null }).eq('id', m.id);
     setEditionOuverte(null);
     charger();
   }
@@ -133,16 +135,18 @@ export default function PopupMatieres({ onFermer }) {
                 </div>
 
                 {editionOuverte === m.id && (
-                  <input
+                  <select
                     value={semestreEdition}
-                    onChange={(e) => setSemestreEdition(e.target.value)}
-                    onBlur={() => enregistrerEdition(m)}
-                    placeholder="Semestre"
+                    onChange={(e) => { setSemestreEdition(e.target.value); enregistrerEdition(m, { semestre: e.target.value }); }}
                     style={{ marginBottom: 10, fontSize: '0.8rem' }}
-                  />
+                  >
+                    <option value="">Toute l'année</option>
+                    <option value="S1">S1</option>
+                    <option value="S2">S2</option>
+                  </select>
                 )}
 
-                <div className="smc-meta">{m.semestre || 'Aucun semestre'} · {m.cours.length} cours</div>
+                <div className="smc-meta">{m.semestre || 'Toute l\'année'} · {m.cours.length} cours</div>
 
                 <div className="color-grid" style={{ marginBottom: 14 }}>
                   {COULEURS.map((c) => (
@@ -191,7 +195,11 @@ export default function PopupMatieres({ onFermer }) {
                   <input value={nouvelleMatiere} onChange={(e) => setNouvelleMatiere(e.target.value)} placeholder="Nom de la matière" style={{ flex: 1 }} />
                 </div>
                 <div className="field" style={{ marginBottom: 10 }}>
-                  <input value={nouveauSemestre} onChange={(e) => setNouveauSemestre(e.target.value)} placeholder="Semestre (optionnel)" />
+                  <select value={nouveauSemestre} onChange={(e) => setNouveauSemestre(e.target.value)}>
+                    <option value="">Toute l'année</option>
+                    <option value="S1">S1</option>
+                    <option value="S2">S2</option>
+                  </select>
                 </div>
                 <button className="btn btn-primary btn-sm" type="submit" style={{ width: '100%' }}>Ajouter</button>
               </form>

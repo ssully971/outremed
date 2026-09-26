@@ -28,6 +28,9 @@ export default function FicheEtudiant() {
   const [profilSousFilieres, setProfilSousFilieres] = useState([]);
   const [profilMatieres, setProfilMatieres] = useState([]);
   const [editionFiliereOuverte, setEditionFiliereOuverte] = useState(false);
+  const [nouvelEmailInvitation, setNouvelEmailInvitation] = useState('');
+  const [renvoiEnCours, setRenvoiEnCours] = useState(false);
+  const [messageRenvoi, setMessageRenvoi] = useState('');
   const navigate = useNavigate();
 
   async function charger() {
@@ -156,6 +159,30 @@ export default function FicheEtudiant() {
     charger();
   }
 
+  async function renvoyerInvitation() {
+    setRenvoiEnCours(true);
+    setMessageRenvoi('');
+    const { data: session } = await supabase.auth.getSession();
+    let res, result;
+    try {
+      res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/resend-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+        body: JSON.stringify({ id, nouvel_email: nouvelEmailInvitation.trim() || undefined, redirect_url: window.location.origin }),
+      });
+      result = await res.json().catch(() => ({}));
+    } catch {
+      setRenvoiEnCours(false);
+      setMessageRenvoi("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
+      return;
+    }
+    setRenvoiEnCours(false);
+    if (!res.ok) { setMessageRenvoi('Erreur : ' + (result.error || 'une erreur inconnue est survenue.')); return; }
+    setMessageRenvoi('Invitation renvoyée.');
+    setNouvelEmailInvitation('');
+    charger();
+  }
+
   async function supprimerDefinitivement() {
     setSuppressionEnCours(true);
     const { data: session } = await supabase.auth.getSession();
@@ -272,6 +299,11 @@ export default function FicheEtudiant() {
         <div className="avatar-big">{etudiant.pseudo.slice(0, 2).toUpperCase()}</div>
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: '0 0 4px' }}>{etudiant.pseudo}</h2>
+          {(etudiant.nom_complet || etudiant.email) && (
+            <p style={{ margin: '0 0 4px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              {[etudiant.nom_complet, etudiant.email].filter(Boolean).join(' · ')}
+            </p>
+          )}
           <p style={{ margin: 0 }}>Dernière activité : {derniereActivite}</p>
         </div>
         <span className={`status-tag ${etudiant.compte_actif && etudiant.statut_compte !== 'suspendu' ? (etudiant.statut_compte === 'essai_gratuit' ? 'status-pending' : 'status-validated') : 'status-inactive'}`}>
@@ -453,6 +485,26 @@ export default function FicheEtudiant() {
           </select>
           <p className="field-hint">Un étudiant annale ne voit que les QCM, quel que soit le mode actuel du site.</p>
         </div>
+
+        {!etudiant.mot_de_passe_defini && (
+          <div className="field">
+            <label>Invitation en attente</label>
+            <p className="field-hint" style={{ marginTop: 0 }}>Ce compte n'a pas encore défini son mot de passe.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input
+                type="email"
+                value={nouvelEmailInvitation}
+                onChange={(e) => setNouvelEmailInvitation(e.target.value)}
+                placeholder={etudiant.email || 'Corriger l\'email avant renvoi (optionnel)'}
+                style={{ flex: 1, minWidth: 200 }}
+              />
+              <button className="btn btn-outline" onClick={renvoyerInvitation} disabled={renvoiEnCours}>
+                {renvoiEnCours ? 'Envoi...' : "Renvoyer l'invitation"}
+              </button>
+            </div>
+            {messageRenvoi && <p style={{ fontSize: '0.78rem', color: messageRenvoi.startsWith('Erreur') ? 'var(--error)' : 'var(--success)', marginTop: 6 }}>{messageRenvoi}</p>}
+          </div>
+        )}
 
         <div className="detail-actions-row" style={{ paddingTop: 0, borderTop: 'none', marginTop: 0 }}>
           {etudiant.compte_actif && etudiant.statut_compte !== 'suspendu' ? (

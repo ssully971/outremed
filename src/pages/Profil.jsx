@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { uploaderDocumentLegal } from '../lib/uploadDocument';
 
 const CATEGORIES_NOTIF_COMMUNES = [
   ['qcm_publie', 'Nouveaux QCM publiés'],
@@ -37,6 +38,8 @@ export default function Profil() {
 
   const [params, setParams] = useState({});
   const [messageParams, setMessageParams] = useState('');
+  const [importPdfEnCours, setImportPdfEnCours] = useState(false);
+  const [erreurPdf, setErreurPdf] = useState('');
 
   const [annonces, setAnnonces] = useState([]);
   const [utilisateurs, setUtilisateurs] = useState([]);
@@ -147,6 +150,24 @@ export default function Profil() {
 
   function majParam(cle, valeur) {
     setParams((prev) => ({ ...prev, [cle]: valeur }));
+  }
+
+  // Sauvegarde immédiate comme changerModeSite ci-dessous, pas dans le batch "Enregistrer les
+  // paramètres" — sinon l'URL se perd si le tuteur oublie de cliquer sur le bouton global.
+  async function gererImportPdf(e) {
+    const fichier = e.target.files[0];
+    e.target.value = '';
+    if (!fichier) return;
+    setErreurPdf('');
+    setImportPdfEnCours(true);
+    try {
+      const url = await uploaderDocumentLegal('politique-confidentialite', fichier, params.politique_confidentialite_url);
+      majParam('politique_confidentialite_url', url);
+      await supabase.from('parametres').update({ valeur: url }).eq('cle', 'politique_confidentialite_url');
+    } catch (err) {
+      setErreurPdf(err.message);
+    }
+    setImportPdfEnCours(false);
   }
 
   async function changerModeSite(nouveauMode) {
@@ -415,6 +436,21 @@ export default function Profil() {
             <div className="field">
               <label>Lien mentions légales / conditions d'utilisation</label>
               <input value={params.mentions_legales_url || ''} onChange={(e) => majParam('mentions_legales_url', e.target.value)} placeholder="À définir avant la mise en ligne" />
+            </div>
+
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Politique de confidentialité (PDF)</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {params.politique_confidentialite_url && (
+                  <a href={params.politique_confidentialite_url} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">📄 Voir le PDF actuel</a>
+                )}
+                <label className="btn btn-primary btn-sm" style={{ cursor: importPdfEnCours ? 'default' : 'pointer', opacity: importPdfEnCours ? 0.6 : 1 }}>
+                  {importPdfEnCours ? 'Import...' : params.politique_confidentialite_url ? 'Remplacer le PDF' : 'Importer le PDF'}
+                  <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }} disabled={importPdfEnCours} onChange={gererImportPdf} />
+                </label>
+              </div>
+              <p className="field-hint">PDF uniquement, 5 Mo maximum. Remplace automatiquement l'ancien fichier.</p>
+              {erreurPdf && <div className="error-msg">{erreurPdf}</div>}
             </div>
           </div>
 

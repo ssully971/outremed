@@ -34,8 +34,33 @@ export default function Navbar() {
         return;
       }
 
-      if (data?.role === 'etudiant' && !data.modalite_id && location.pathname !== '/choisir-filiere') {
+      // Une seule requête parametres, réutilisée pour les trois murs ci-dessous ET pour les
+      // réglages de la fin de fonction — évite une requête séparée à chaque navigation.
+      const { data: params } = await supabase.from('parametres').select('cle, valeur').in('cle', [
+        'forum_actif', 'planning_actif', 'classement_actif', 'mes_stats_actif', 'mode_site', 'semestre_actif',
+      ]);
+      const map = {};
+      (params || []).forEach((p) => { map[p.cle] = p.valeur; });
+
+      if (data?.role === 'etudiant' && !data.nom_complet && location.pathname !== '/completer-profil') {
+        navigate('/completer-profil');
+        return;
+      }
+
+      // Exclut aussi /completer-profil : sinon, dès que la redirection ci-dessus amène l'étudiant
+      // sur cette page, ce mur se redéclenche immédiatement (modalite_id toujours null à ce
+      // stade) et le renvoie vers /choisir-filiere avant qu'il ait pu saisir son nom.
+      if (data?.role === 'etudiant' && !data.modalite_id && location.pathname !== '/choisir-filiere' && location.pathname !== '/completer-profil') {
         navigate('/choisir-filiere');
+        return;
+      }
+
+      // Reconfirmation périodique des facultatives : ne se déclenche que si la filière est déjà
+      // choisie (jamais avant /choisir-filiere) et seulement si la confirmation est périmée pour
+      // le semestre actif — ChoisirFacultatives.jsx décide ensuite s'il y a vraiment quelque
+      // chose à reconfirmer (sinon il marque silencieusement et revient ici tout seul).
+      if (data?.role === 'etudiant' && data.modalite_id && location.pathname !== '/choisir-facultatives' && data.facultatives_confirmees_pour !== (map.semestre_actif || '')) {
+        navigate('/choisir-facultatives');
         return;
       }
 
@@ -50,11 +75,6 @@ export default function Navbar() {
         document.documentElement.style.setProperty('--accent-soft', accent + '14');
       }
 
-      const { data: params } = await supabase.from('parametres').select('cle, valeur').in('cle', [
-        'forum_actif', 'planning_actif', 'classement_actif', 'mes_stats_actif', 'mode_site',
-      ]);
-      const map = {};
-      (params || []).forEach((p) => { map[p.cle] = p.valeur; });
       setForumActif(map.forum_actif !== 'false');
       setPlanningActif(map.planning_actif !== 'false');
       setClassementActif(map.classement_actif !== 'false');

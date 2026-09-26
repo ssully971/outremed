@@ -7,6 +7,7 @@ const COULEURS = ['#FF3EB5', '#38bdf8', '#22c55e', '#f97316', '#a78bfa', '#ef444
 export default function CreerMatiereCoursModal({ mode, matiereId, nomInitial = '', onCree, onFermer }) {
   const [nom, setNom] = useState(nomInitial);
   const [emoji, setEmoji] = useState('');
+  const [semestre, setSemestre] = useState('');
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState('');
 
@@ -21,6 +22,7 @@ export default function CreerMatiereCoursModal({ mode, matiereId, nomInitial = '
       const maxOrdre = Math.max(0, ...(existantes || []).map((m) => m.ordre || 0));
       const { data, error } = await supabase.from('matieres').insert({
         nom: nom.trim(),
+        semestre: semestre || null,
         ordre: maxOrdre + 1,
         couleur: COULEURS[Math.floor(Math.random() * COULEURS.length)],
         emoji: emoji.trim() || null,
@@ -50,6 +52,16 @@ export default function CreerMatiereCoursModal({ mode, matiereId, nomInitial = '
             )}
             <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder={mode === 'matiere' ? 'Nom de la matière' : 'Nom du cours'} autoFocus style={{ flex: 1 }} />
           </div>
+          {mode === 'matiere' && (
+            <div className="field">
+              <label>Semestre</label>
+              <select value={semestre} onChange={(e) => setSemestre(e.target.value)}>
+                <option value="">Toute l'année</option>
+                <option value="S1">S1</option>
+                <option value="S2">S2</option>
+              </select>
+            </div>
+          )}
           {erreur && <div className="error-msg">{erreur}</div>}
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <button type="button" className="btn btn-ghost" onClick={onFermer}>Annuler</button>

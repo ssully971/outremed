@@ -1,10 +1,25 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { envoyerNotificationGroupe } from '../lib/notifier';
 import ImageEnonceUpload from '../components/ImageEnonceUpload';
+import { estMatiereActive } from '../lib/filiere';
 
 const LETTRES = 'ABCDEFGH';
+
+const TYPES_QCM = [
+  { val: 'entrainement', icon: '📘', titre: 'Entraînement', desc: 'Correction affichée après chaque question. Nombre de questions modifiable.' },
+  { val: 'kholle', icon: '🔥', titre: 'Kholle hebdomadaire', desc: "Visible uniquement pendant le créneau choisi, redevient un entraînement une fois terminée. Toujours 20 questions." },
+  { val: 'annale', icon: '📄', titre: 'Annale', desc: "L'étudiant choisit lui-même entraînement ou concours. Nombre de questions modifiable." },
+  { val: 'concours_blanc', icon: '🏆', titre: 'Concours blanc', desc: 'Minuté, correction à la fin, une seule tentative. Toujours 20 questions.' },
+];
+
+function typeGeneralDepuisQcm(q) {
+  if (q.is_kholle) return 'kholle';
+  if (q.is_annale) return 'annale';
+  if (q.type_qcm === 'concours_blanc') return 'concours_blanc';
+  return 'entrainement';
+}
 
 function formatDateHeure(iso) {
   return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -13,12 +28,15 @@ function formatDateHeure(iso) {
 export default function EditionQcm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [chargement, setChargement] = useState(true);
   const [qcm, setQcm] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [matieres, setMatieres] = useState([]);
   const [cours, setCours] = useState([]);
   const [semainesKholle, setSemainesKholle] = useState([]);
+  const [typeGeneral, setTypeGeneral] = useState('entrainement');
+  const [coursAnnaleIds, setCoursAnnaleIds] = useState([]);
   const [message, setMessage] = useState('');
   const [enregistrement, setEnregistrement] = useState(false);
   const [apercuOuvert, setApercuOuvert] = useState(null);
@@ -28,6 +46,9 @@ export default function EditionQcm() {
   const [monPseudo, setMonPseudo] = useState('');
   const [navOuverte, setNavOuverte] = useState(false);
   const [mode, setMode] = useState('edition');
+  const [matiereInitialeId, setMatiereInitialeId] = useState(null);
+  const [semestreInitiale, setSemestreInitiale] = useState(null);
+  const [semestreActif, setSemestreActif] = useState('');
 
   async function charger() {
     const { data: session } = await supabase.auth.getSession();
@@ -42,6 +63,10 @@ export default function EditionQcm() {
 
     const { data: qcmData } = await supabase.from('qcms').select('*').eq('id', id).single();
     setQcm(qcmData);
+    if (qcmData) { setTypeGeneral(typeGeneralDepuisQcm(qcmData)); setMatiereInitialeId(qcmData.matiere_id); setSemestreInitiale(qcmData.semestre); }
+
+    const { data: paramSem } = await supabase.from('parametres').select('valeur').eq('cle', 'semestre_actif').single();
+    setSemestreActif(paramSem?.valeur || '');
 
     const { data: qs } = await supabase.from('questions').select('*').eq('qcm_id', id).order('ordre');
     const { data: its } = await supabase.from('items').select('*').in('question_id', (qs || []).map((q) => q.id));
@@ -52,15 +77,31 @@ export default function EditionQcm() {
     const { data: crs } = await supabase.from('cours').select('*').eq('est_prive', false).order('nom');
     setCours(crs || []);
 
-    if (qcmData?.is_kholle) {
-      const { data: semaines } = await supabase.from('semaines_kholle').select('*').order('debut', { ascending: false });
-      setSemainesKholle(semaines || []);
+    // Chargée systématiquement (pas seulement si déjà kholle) : il faut la liste disponible
+    // dès qu'on bascule VERS kholle, pas seulement quand le QCM en est déjà une.
+    const { data: semaines } = await supabase.from('semaines_kholle').select('*').order('debut', { ascending: false });
+    setSemainesKholle(semaines || []);
+
+    if (qcmData?.is_annale) {
+      const { data: qc } = await supabase.from('qcm_cours').select('cours_id').eq('qcm_id', id);
+      setCoursAnnaleIds((qc || []).map((r) => r.cours_id));
     }
 
     setChargement(false);
   }
 
   useEffect(() => { charger(); }, [id]);
+
+  // Arrivée depuis un signalement (lien "Voir la question →") : défile jusqu'à la question
+  // visée une fois le contenu chargé, plutôt que de la laisser chercher manuellement.
+  useEffect(() => {
+    if (chargement || mode !== 'edition') return;
+    const ordreVise = Number(searchParams.get('q'));
+    if (!ordreVise) return;
+    const qIdx = questions.findIndex((q) => q.ordre === ordreVise);
+    if (qIdx === -1) return;
+    document.getElementById(`question-${qIdx}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [chargement, mode, questions, searchParams]);
 
   function majQcm(champ, valeur) {
     setQcm((prev) => ({ ...prev, [champ]: valeur }));
@@ -111,7 +152,7 @@ export default function EditionQcm() {
       await envoyerNotificationGroupe(
         admins.map((a) => a.id), 'signalement_erreur',
         `${monPseudo} a un doute sur "${qcm.titre}"`,
-        `/qcm/${id}?q=${question.ordre}`
+        `/qcm/${id}/modifier?q=${question.ordre}`
       );
     }
 
@@ -120,24 +161,52 @@ export default function EditionQcm() {
   }
 
   async function enregistrer() {
+    if (typeGeneral === 'kholle' && !qcm.semaine_kholle_id) {
+      setMessage('Erreur : choisis une semaine de kholle.');
+      return;
+    }
+    if (typeGeneral === 'annale' && coursAnnaleIds.length === 0) {
+      setMessage('Erreur : sélectionne au moins un cours pour cette annale.');
+      return;
+    }
     if (!/^\d{4}-S[12]$/.test(qcm.semestre || '')) {
       setMessage('Erreur : le semestre doit être au format AAAA-S1 ou AAAA-S2 (ex : 2026-S1).');
       return;
     }
     setEnregistrement(true);
 
+    let type_qcm = 'entrainement', is_kholle = false, is_annale = false;
+    if (typeGeneral === 'concours_blanc') type_qcm = 'concours_blanc';
+    if (typeGeneral === 'kholle') { type_qcm = 'concours_blanc'; is_kholle = true; }
+    if (typeGeneral === 'annale') { type_qcm = 'entrainement'; is_annale = true; }
+
     await supabase.from('qcms').update({
       titre: qcm.titre,
       matiere_id: qcm.matiere_id,
-      cours_id: qcm.cours_id,
+      cours_id: typeGeneral !== 'annale' ? (qcm.cours_id || null) : null,
       is_classe: qcm.is_classe,
       semestre: qcm.semestre,
+      type_qcm, is_annale, is_kholle,
+      // Ne jamais effacer semaine_kholle_id/kholle_debut/kholle_fin en sortant de kholle : comme
+      // cloturer_kholles_expirees() (voir CLAUDE.md), ce QCM doit rester rattaché à sa semaine
+      // pour que ses tentatives passées restent comptées dans resultats_classement (dont le
+      // WHERE inclut `semaine_kholle_id IS NOT NULL`) — seul un passage EN kholle les renseigne.
       semaine_kholle_id: qcm.semaine_kholle_id,
       kholle_debut: qcm.kholle_debut,
       kholle_fin: qcm.kholle_fin,
+      duree_minutes: type_qcm === 'concours_blanc' ? (qcm.duree_minutes || 30) : null,
+      publie: is_kholle ? true : qcm.publie,
       modifie_par: monId,
       modifie_le: new Date().toISOString(),
     }).eq('id', id);
+
+    // Repart toujours de zéro plutôt qu'un diff incrémental — qcm_cours est une simple table
+    // de liaison, sans coût à la vider/reconstruire, et ça vide naturellement les anciennes
+    // liaisons en sortant du type annale (coursAnnaleIds n'est alors pas réinséré).
+    await supabase.from('qcm_cours').delete().eq('qcm_id', id);
+    if (is_annale && coursAnnaleIds.length > 0) {
+      await supabase.from('qcm_cours').insert(coursAnnaleIds.map((cours_id) => ({ qcm_id: id, cours_id })));
+    }
 
     for (const q of questions) {
       await supabase.from('questions').update({ enonce: q.enonce, lien: q.lien || null }).eq('id', q.id);
@@ -164,6 +233,8 @@ export default function EditionQcm() {
 
   if (chargement) return <div style={{ padding: 40 }}>Chargement...</div>;
   if (!qcm) return <div style={{ padding: 40 }}>QCM introuvable.</div>;
+
+  const matiereActuelle = matieres.find((m) => m.id === qcm.matiere_id);
 
   return (
     <div className="container" style={{ maxWidth: 700 }}>
@@ -207,6 +278,25 @@ export default function EditionQcm() {
         </>
       ) : (
       <>
+      <div className="field">
+        <label>Type de QCM</label>
+        <div className="type-grid">
+          {TYPES_QCM.map((t) => (
+            <div key={t.val} className={`type-card ${typeGeneral === t.val ? 'selected' : ''}`} onClick={() => setTypeGeneral(t.val)}>
+              <span className="tc-icon">{t.icon}</span>
+              <div className="tc-title">{t.titre}</div>
+              <div className="tc-desc">{t.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {(typeGeneral === 'kholle' || typeGeneral === 'concours_blanc') && qcm.nb_questions !== 20 && (
+        <div className="warn-box" style={{ marginBottom: 16 }}>
+          <div>⚠️ Ce type nécessite normalement 20 questions, mais ce QCM en a {qcm.nb_questions}. Le nombre n'est pas modifié automatiquement — les questions existantes restent inchangées, ajuste-les manuellement ci-dessous si besoin.</div>
+        </div>
+      )}
+
       <div className="settings-card">
         <div className="field">
           <label>Titre</label>
@@ -215,25 +305,50 @@ export default function EditionQcm() {
 
         <div className="field">
           <label>Matière</label>
-          <select value={qcm.matiere_id || ''} onChange={(e) => majQcm('matiere_id', e.target.value)}>
+          <select
+            value={qcm.matiere_id || ''}
+            onChange={(e) => {
+              const nouvelleMatiereId = e.target.value;
+              majQcm('matiere_id', nouvelleMatiereId);
+              if (nouvelleMatiereId === matiereInitialeId) {
+                // Retour à la matière d'origine : restaure sa vraie valeur historique plutôt
+                // que de la recalculer sur le semestre actif (qui peut différer si ce QCM date
+                // d'une année précédente).
+                majQcm('semestre', semestreInitiale);
+              } else {
+                const m = matieres.find((mm) => mm.id === nouvelleMatiereId);
+                if (m?.semestre) majQcm('semestre', semestreActif);
+              }
+            }}
+          >
             <option value="">— choisir —</option>
-            {matieres.filter((m) => m.actif !== false || m.id === qcm.matiere_id).map((m) => <option key={m.id} value={m.id}>{m.nom}{m.actif === false ? ' (désactivée)' : ''}</option>)}
+            {matieres.filter((m) => m.id === qcm.matiere_id || (m.actif !== false && estMatiereActive(m, semestreActif))).map((m) => <option key={m.id} value={m.id}>{m.nom}{m.actif === false ? ' (désactivée)' : ''}</option>)}
           </select>
         </div>
 
-        <div className="field">
-          <label>Cours (optionnel)</label>
-          <select value={qcm.cours_id || ''} onChange={(e) => majQcm('cours_id', e.target.value)}>
-            <option value="">— aucun —</option>
-            {cours.filter((c) => c.matiere_id === qcm.matiere_id).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
-          </select>
-        </div>
+        {typeGeneral === 'annale' ? (
+          <div className="field">
+            <label>Cours concernés (plusieurs possibles)</label>
+            <select multiple value={coursAnnaleIds} onChange={(e) => setCoursAnnaleIds([...e.target.selectedOptions].map((o) => o.value))} style={{ minHeight: 100 }}>
+              {cours.filter((c) => c.matiere_id === qcm.matiere_id).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+            </select>
+            <p className="field-hint">L'étudiant choisira lui-même de la faire en mode entraînement ou concours.</p>
+          </div>
+        ) : (
+          <div className="field">
+            <label>Cours (optionnel)</label>
+            <select value={qcm.cours_id || ''} onChange={(e) => majQcm('cours_id', e.target.value)}>
+              <option value="">— aucun —</option>
+              {cours.filter((c) => c.matiere_id === qcm.matiere_id).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+            </select>
+          </div>
+        )}
 
-        {qcm.is_kholle && (
+        {typeGeneral === 'kholle' && (
           <div className="field">
             <label>Semaine de kholle</label>
             <select value={qcm.semaine_kholle_id || ''} onChange={(e) => changerSemaineKholle(e.target.value)}>
-              <option value="">— aucune —</option>
+              <option value="">— choisir —</option>
               {semainesKholle.map((s) => (
                 <option key={s.id} value={s.id}>Du {formatDateHeure(s.debut)} au {formatDateHeure(s.fin)}</option>
               ))}
@@ -243,8 +358,14 @@ export default function EditionQcm() {
         )}
 
         <div className="field">
-          <label>Semestre</label>
-          <input value={qcm.semestre || ''} onChange={(e) => majQcm('semestre', e.target.value)} placeholder="2025-S1" />
+          <label>Semestre {matiereActuelle?.semestre && '(verrouillé sur la matière)'}</label>
+          <input
+            value={qcm.semestre || ''}
+            onChange={(e) => majQcm('semestre', e.target.value)}
+            placeholder="2025-S1"
+            readOnly={!!matiereActuelle?.semestre}
+            disabled={!!matiereActuelle?.semestre}
+          />
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

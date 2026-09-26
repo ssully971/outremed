@@ -11,6 +11,7 @@ export default function Comptes() {
   // Ajouter un compte
   const [email, setEmail] = useState('');
   const [pseudo, setPseudo] = useState('');
+  const [nomComplet, setNomComplet] = useState('');
   const [role, setRole] = useState('etudiant');
   const [statutCompte, setStatutCompte] = useState('actif');
   const [essaiSemaines, setEssaiSemaines] = useState(1);
@@ -40,6 +41,7 @@ export default function Comptes() {
   const [moyennesEtudiants, setMoyennesEtudiants] = useState({});
   const [ajoutOuvert, setAjoutOuvert] = useState(false);
   const [statsTuteurs, setStatsTuteurs] = useState({});
+  const [renvoiEnCours, setRenvoiEnCours] = useState(null);
 
   async function charger() {
     const { data: session } = await supabase.auth.getSession();
@@ -114,7 +116,7 @@ export default function Comptes() {
       res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-        body: JSON.stringify({ email, pseudo, role, statut_compte: categorieCompte === 'annale' ? 'actif' : statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin, categorie_compte: role === 'etudiant' ? (categorieCompte || null) : null }),
+        body: JSON.stringify({ email, pseudo, role, nom_complet: nomComplet, statut_compte: categorieCompte === 'annale' ? 'actif' : statutCompte, essai_semaines: essaiSemaines, redirect_url: window.location.origin, categorie_compte: role === 'etudiant' ? (categorieCompte || null) : null }),
       });
       result = await res.json().catch(() => ({}));
     } catch {
@@ -139,7 +141,7 @@ export default function Comptes() {
       );
     }
 
-    setEmail(''); setPseudo('');
+    setEmail(''); setPseudo(''); setNomComplet('');
     setAjoutOuvert(false);
     charger();
   }
@@ -182,6 +184,27 @@ export default function Comptes() {
     }
 
     charger();
+  }
+
+  async function renvoyerInvitation(compte) {
+    setRenvoiEnCours(compte.id);
+    const { data: session } = await supabase.auth.getSession();
+    let res, result;
+    try {
+      res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/resend-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+        body: JSON.stringify({ id: compte.id, redirect_url: window.location.origin }),
+      });
+      result = await res.json().catch(() => ({}));
+    } catch {
+      setRenvoiEnCours(null);
+      alert("Erreur : impossible de contacter le serveur. Vérifie ta connexion et réessaie.");
+      return;
+    }
+    setRenvoiEnCours(null);
+    if (!res.ok) { alert('Erreur : ' + (result.error || 'une erreur inconnue est survenue.')); return; }
+    alert(`Invitation renvoyée à ${compte.pseudo}.`);
   }
 
   async function supprimerTuteur(tuteur) {
@@ -335,6 +358,17 @@ export default function Comptes() {
                     {statut.texte}
                   </span>
                   <div className="sr-actions">
+                    {!e.mot_de_passe_defini && (
+                      <button
+                        type="button"
+                        className="icon-action"
+                        title="Renvoyer l'invitation"
+                        disabled={renvoiEnCours === e.id}
+                        onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); renvoyerInvitation(e); }}
+                      >
+                        ✉️
+                      </button>
+                    )}
                     <span className="icon-action" title="Voir la fiche">→</span>
                   </div>
                 </Link>
@@ -370,6 +404,9 @@ export default function Comptes() {
                     <div className="tr-stat"><div className="val">{stats.validationsMois}</div><div className="lbl">Validés</div></div>
                     <span className={`status-tag ${t.compte_actif ? 'status-validated' : 'status-inactive'}`}>{t.compte_actif ? 'Actif' : 'Désactivé'}</span>
                     <div className="tr-actions">
+                      {!t.mot_de_passe_defini && (
+                        <button type="button" className="icon-action" title="Renvoyer l'invitation" disabled={renvoiEnCours === t.id} onClick={() => renvoyerInvitation(t)}>✉️</button>
+                      )}
                       <button className={`icon-action ${t.compte_actif ? 'danger' : ''}`} title={t.compte_actif ? 'Désactiver' : 'Réactiver'} onClick={() => basculerActivationTuteur(t)}>
                         {t.compte_actif ? '⛔' : '🔄'}
                       </button>
@@ -422,6 +459,10 @@ export default function Comptes() {
             <div className="field">
               <label>Pseudo</label>
               <input value={pseudo} onChange={(e) => setPseudo(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label>Nom complet</label>
+              <input value={nomComplet} onChange={(e) => setNomComplet(e.target.value)} />
             </div>
             {!(monProfil.role === 'tuteur' && modeSite === 'annale') && (
               <div className="field">

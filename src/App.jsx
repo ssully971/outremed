@@ -24,6 +24,8 @@ import MesStats from './pages/MesStats';
 import FicheTuteur from './pages/FicheTuteur';
 import GestionFilieres from './pages/GestionFilieres';
 import ChoisirFiliere from './pages/ChoisirFiliere';
+import CompleterProfil from './pages/CompleterProfil';
+import ChoisirFacultatives from './pages/ChoisirFacultatives';
 import AnnexeListeQcm from './pages/AnnexeListeQcm';
 import AnnexeCreationQcm from './pages/AnnexeCreationQcm';
 import AnnexeGestionQcm from './pages/AnnexeGestionQcm';
@@ -53,6 +55,8 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/definir-mot-de-passe" element={<DefinirMotDePasse />} />
         <Route path="/choisir-filiere" element={<ChoisirFiliere />} />
+        <Route path="/completer-profil" element={<CompleterProfil />} />
+        <Route path="/choisir-facultatives" element={<ChoisirFacultatives />} />
         <Route path="/demande-inscription" element={<DemandeInscription />} />
 
         <Route element={<Layout />}>

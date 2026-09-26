@@ -40,7 +40,7 @@ export default function DefinirMotDePasse() {
     const { data: session } = await supabase.auth.getSession();
     const jeton = crypto.randomUUID();
     localStorage.setItem('outremed_session_token', jeton);
-    await supabase.from('profiles').update({ session_courante: jeton }).eq('id', session.session.user.id);
+    await supabase.from('profiles').update({ session_courante: jeton, mot_de_passe_defini: true }).eq('id', session.session.user.id);
 
     navigate('/accueil');
   }
